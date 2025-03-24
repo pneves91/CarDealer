@@ -1,9 +1,9 @@
-package com.cardealer.boot;
+package com.cardealer;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
-@SpringBootApplication
+@SpringBootApplication(scanBasePackageClasses = CarDealerApplication.class)
 public class CarDealerApplication {
 
 	public static void main(String[] args) {
