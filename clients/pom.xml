@@ -12,11 +12,15 @@
     <artifactId>clients</artifactId>
 
     <dependencies>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
         <!-- MODULE DEPENDENCIES START -->
         <dependency>
             <groupId>com.cardealer</groupId>
             <artifactId>models</artifactId>
-            <version>${project.version}</version>
         </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>

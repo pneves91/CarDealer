@@ -9,19 +9,14 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>services</artifactId>
+    <artifactId>repositories</artifactId>
 
     <dependencies>
         <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <scope>provided</scope>
-        </dependency>
+
 
         <!-- MODULE DEPENDENCIES START -->
         <dependency>
@@ -30,15 +25,7 @@
         </dependency>
         <dependency>
             <groupId>com.cardealer</groupId>
-            <artifactId>mappers</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.cardealer</groupId>
-            <artifactId>clients</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.cardealer</groupId>
-            <artifactId>repositories</artifactId>
+            <artifactId>configs</artifactId>
         </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>
