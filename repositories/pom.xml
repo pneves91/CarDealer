@@ -17,15 +17,10 @@
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
 
-
         <!-- MODULE DEPENDENCIES START -->
         <dependency>
             <groupId>com.cardealer</groupId>
             <artifactId>models</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.cardealer</groupId>
-            <artifactId>configs</artifactId>
         </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>

@@ -24,8 +24,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
 
         <!-- MODULE DEPENDENCIES START -->
+        <dependency>
+            <groupId>com.cardealer</groupId>
+            <artifactId>services</artifactId>
+        </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>
 </project>
