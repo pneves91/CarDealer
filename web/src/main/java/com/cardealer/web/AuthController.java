@@ -1,9 +1,10 @@
 package com.cardealer.web;
 
-import com.cardealer.models.dto.AuthDTO;
-import com.cardealer.models.dto.TokenDTO;
 import com.cardealer.models.User;
+import com.cardealer.models.request.auth.*;
+import com.cardealer.models.response.auth.AuthTokensResponse;
 import com.cardealer.services.AuthService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,23 +18,30 @@ public class AuthController {
 
     // Endpoint para registo de novo utilizador e criação de empresa
     @PostMapping("/register")
-    public ResponseEntity<TokenDTO> register(@RequestBody AuthDTO authDTO) {
-        TokenDTO tokenDTO = authService.register(authDTO);
-        return ResponseEntity.status(201).body(tokenDTO);
+    public ResponseEntity<AuthTokensResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
+        AuthTokensResponse authTokensResponse = authService.register(registerRequest);
+        return ResponseEntity.status(201).body(authTokensResponse);
     }
 
-    // Endpoint para verificação de email (envio de código de verificação)
-    @PostMapping("/verify-email")
-    public ResponseEntity<Void> verifyEmail(@RequestBody AuthDTO authDTO) {
-        authService.verifyEmail(authDTO.getToken());
+    // Endpoint para verificação de email
+    @GetMapping("/verify-email")
+    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
+        authService.verifyEmail(token);
+        return ResponseEntity.ok().build();
+    }
+
+    // Endpoint para reenviar o email de verificação
+    @PostMapping("/resend-verification-email")
+    public ResponseEntity<Void> resendVerificationEmail(@Valid @RequestBody ResendVerificationEmailRequest resendVerificationEmailRequest) {
+        authService.resendVerificationEmail(resendVerificationEmailRequest.getEmail());
         return ResponseEntity.ok().build();
     }
 
     // Endpoint para login (devolve o token de acesso)
     @PostMapping("/login")
-    public ResponseEntity<TokenDTO> login(@RequestBody AuthDTO authDTO) {
-        TokenDTO tokenDTO = authService.login(authDTO);
-        return ResponseEntity.ok(tokenDTO);
+    public ResponseEntity<AuthTokensResponse> login(@Valid @RequestBody LoginRequest loginRequest) {
+        AuthTokensResponse authTokensResponse = authService.login(loginRequest);
+        return ResponseEntity.ok(authTokensResponse);
     }
 
     // Endpoint para logout (revogação do token)
@@ -45,15 +53,15 @@ public class AuthController {
 
     // Endpoint para recuperação de senha (envia link de recuperação)
     @PostMapping("/forgot-password")
-    public ResponseEntity<Void> forgotPassword(@RequestBody AuthDTO authDTO) {
-        authService.forgotPassword(authDTO.getEmail());
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest forgotPasswordRequest) {
+        authService.forgotPassword(forgotPasswordRequest.getEmail());
         return ResponseEntity.ok().build();
     }
 
     // Endpoint para repor a senha com o token enviado por email
     @PostMapping("/reset-password")
-    public ResponseEntity<Void> resetPassword(@RequestBody AuthDTO authDTO) {
-        authService.resetPassword(authDTO.getToken(), authDTO.getPassword());
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody ResetPasswordRequest resetPasswordRequest) {
+        authService.resetPassword(resetPasswordRequest.getToken(), resetPasswordRequest.getNewPassword());
         return ResponseEntity.ok().build();
     }
 
@@ -66,8 +74,8 @@ public class AuthController {
 
     // Endpoint para realizar refresh do token de acesso
     @PostMapping("/refresh-token")
-    public ResponseEntity<TokenDTO> refreshToken(@RequestBody TokenDTO tokenDTO) {
-        TokenDTO refreshedTokenDTO = authService.refreshToken(tokenDTO.getAccessToken(), tokenDTO.getRefreshToken());
-        return ResponseEntity.ok(refreshedTokenDTO);
+    public ResponseEntity<AuthTokensResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
+        AuthTokensResponse refreshedAuthTokensResponse = authService.refreshToken(refreshTokenRequest.getAccessToken(), refreshTokenRequest.getRefreshToken());
+        return ResponseEntity.ok(refreshedAuthTokensResponse);
     }
 }

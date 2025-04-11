@@ -3,8 +3,9 @@ package com.cardealer.services;
 import com.cardealer.models.Role;
 import com.cardealer.models.Token;
 import com.cardealer.models.User;
-import com.cardealer.models.dto.AuthDTO;
-import com.cardealer.models.dto.TokenDTO;
+import com.cardealer.models.request.auth.LoginRequest;
+import com.cardealer.models.request.auth.RegisterRequest;
+import com.cardealer.models.response.auth.AuthTokensResponse;
 import com.cardealer.repositories.TokenRepository;
 import com.cardealer.repositories.UserRepository;
 import com.cardealer.services.exceptions.EmailAlreadyExistsException;
@@ -31,16 +32,16 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public TokenDTO register(AuthDTO authDTO) {
+    public AuthTokensResponse register(RegisterRequest registerRequest) {
         var user = User.builder()
-                .name(authDTO.getName())
-                .email(authDTO.getEmail())
-                .password(passwordEncoder.encode(authDTO.getPassword()))
+                .name(registerRequest.getName())
+                .email(registerRequest.getEmail())
+                .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .role(Role.USER)
                 .build();
 
-        if (userRepository.findByEmail(authDTO.getEmail()).isPresent()) {
-            throw new EmailAlreadyExistsException(authDTO.getEmail());
+        if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
+            throw new EmailAlreadyExistsException(registerRequest.getEmail());
         }
 
         userRepository.save(user);
@@ -50,18 +51,18 @@ public class AuthService {
 
         saveUserToken(user, accessToken);
 
-        return new TokenDTO(accessToken, refreshToken);
+        return new AuthTokensResponse(accessToken, refreshToken);
     }
 
-    public TokenDTO login(AuthDTO authDTO) {
+    public AuthTokensResponse login(LoginRequest loginRequest) {
         var authToken = new UsernamePasswordAuthenticationToken(
-                authDTO.getEmail(),
-                authDTO.getPassword()
+                loginRequest.getEmail(),
+                loginRequest.getPassword()
         );
 
         authenticationManager.authenticate(authToken);
 
-        var user = userRepository.findByEmail(authDTO.getEmail())
+        var user = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow();
 
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
@@ -70,7 +71,7 @@ public class AuthService {
         revokeAllUserTokens(user);
         saveUserToken(user, accessToken);
 
-        return new TokenDTO(accessToken, refreshToken);
+        return new AuthTokensResponse(accessToken, refreshToken);
     }
 
     private void saveUserToken(User user, String jwtToken) {
@@ -105,7 +106,7 @@ public class AuthService {
         });
     }
 
-    public TokenDTO refreshToken(String accessToken, String refreshToken) {
+    public AuthTokensResponse refreshToken(String accessToken, String refreshToken) {
         String email = jwtService.extractEmail(refreshToken);
 
         var user = userRepository.findByEmail(email)
@@ -119,7 +120,7 @@ public class AuthService {
         revokeAllUserTokens(user);
         saveUserToken(user, newAccessToken);
 
-        return new TokenDTO(newAccessToken, refreshToken);
+        return new AuthTokensResponse(newAccessToken, refreshToken);
     }
 
     public User getUserProfile(String authorizationHeader) {
@@ -144,6 +145,21 @@ public class AuthService {
     public void verifyEmail(String token) {
         // TO DO: validar token e ativar conta
         System.out.println("Simular verificação de email com token: " + token);
+    }
+
+    public void resendVerificationEmail(String email) {
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        // TO DO: gerar novo token de verificação (UUID ou JWT curto com claims de email)
+        // TO DO: guardar token num repositório ou enviar diretamente no link
+        // TO DO: simular envio de email
+
+        String mockToken = "mock-verification-token-123456";
+        String verificationLink = "https://teu-dominio.com/auth/verify-email?token=" + mockToken;
+
+        System.out.printf("Simular reenvio de email de verificação para %s com link: %s%n",
+                user.getEmail(), verificationLink);
     }
 
     private String extractToken(String header) {
