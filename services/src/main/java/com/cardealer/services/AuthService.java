@@ -31,7 +31,6 @@ import com.cardealer.configs.properties.AppProperties;
 public class AuthService {
 
     private final AppProperties appProperties;
-
     private final UserRepository userRepository;
     private final TokenRepository tokenRepository;
     private final EmailVerificationTokenRepository emailVerificationTokenRepository;
@@ -42,7 +41,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public AuthTokensResponse register(RegisterRequest registerRequest) {
+    public void register(RegisterRequest registerRequest) {
         if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
             throw new EmailAlreadyExistsException(registerRequest.getEmail());
         }
@@ -70,13 +69,6 @@ public class AuthService {
 
         String verificationLink = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
         mailService.sendVerificationEmail(user.getEmail(), verificationLink);
-
-        var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
-        var refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
-
-        saveUserToken(user, accessToken);
-
-        return new AuthTokensResponse(accessToken, refreshToken);
     }
 
     public AuthTokensResponse login(LoginRequest loginRequest) {
@@ -89,6 +81,10 @@ public class AuthService {
 
         var user = userRepository.findByEmail(loginRequest.getEmail())
                 .orElseThrow();
+
+        if (user.getEmailVerifiedAt() == null) {
+            throw new RuntimeException("Email not verified. Please check your inbox.");
+        }
 
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
         var refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
@@ -198,7 +194,7 @@ public class AuthService {
     }
 
 
-    public void verifyEmail(String token) {
+    public AuthTokensResponse verifyEmail(String token) {
         EmailVerificationToken verificationToken = emailVerificationTokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing token"));
 
@@ -216,6 +212,13 @@ public class AuthService {
 
         verificationToken.setUsed(true);
         emailVerificationTokenRepository.save(verificationToken);
+
+        String accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
+        String refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
+
+        saveUserToken(user, accessToken);
+
+        return new AuthTokensResponse(accessToken, refreshToken);
     }
 
 

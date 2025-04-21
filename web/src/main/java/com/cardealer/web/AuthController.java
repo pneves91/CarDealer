@@ -18,16 +18,16 @@ public class AuthController {
 
     // Endpoint para registo de novo utilizador e criação de empresa
     @PostMapping("/register")
-    public ResponseEntity<AuthTokensResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
-        AuthTokensResponse authTokensResponse = authService.register(registerRequest);
-        return ResponseEntity.status(201).body(authTokensResponse);
+    public ResponseEntity<Void> register(@Valid @RequestBody RegisterRequest registerRequest) {
+        authService.register(registerRequest);
+        return ResponseEntity.ok().build();
     }
 
     // Endpoint para verificação de email
     @GetMapping("/verify-email")
-    public ResponseEntity<Void> verifyEmail(@RequestParam String token) {
-        authService.verifyEmail(token);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<AuthTokensResponse> verifyEmail(@RequestParam String token) {
+        AuthTokensResponse tokens = authService.verifyEmail(token);
+        return ResponseEntity.ok(tokens);
     }
 
     // Endpoint para reenviar o email de verificação
