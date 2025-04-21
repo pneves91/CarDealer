@@ -67,6 +67,10 @@
             <groupId>com.cardealer</groupId>
             <artifactId>repositories</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.cardealer</groupId>
+            <artifactId>configs</artifactId>
+        </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>
 </project>

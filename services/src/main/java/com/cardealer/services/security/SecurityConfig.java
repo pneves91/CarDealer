@@ -1,7 +1,6 @@
-package com.cardealer.configs;
+package com.cardealer.services.security;
 
 import com.cardealer.repositories.UserRepository;
-import com.cardealer.services.security.JwtAuthFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

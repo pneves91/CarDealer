@@ -24,10 +24,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
 
+import com.cardealer.configs.properties.AppProperties;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
+
+    private final AppProperties appProperties;
 
     private final UserRepository userRepository;
     private final TokenRepository tokenRepository;
@@ -65,7 +68,7 @@ public class AuthService {
 
         emailVerificationTokenRepository.save(emailToken);
 
-        String verificationLink = "https://teu-dominio.com/auth/verify-email?token=" + verificationToken;
+        String verificationLink = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
         mailService.sendVerificationEmail(user.getEmail(), verificationLink);
 
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
@@ -168,7 +171,7 @@ public class AuthService {
 
         passwordResetTokenRepository.save(token);
 
-        String link = "https://teu-dominio.com/auth/reset-password?token=" + resetToken;
+        String link = appProperties.getFrontendUrl() + "/auth/reset-password?token=" + resetToken;
 
         mailService.sendPasswordResetEmail(user.getEmail(), link);
     }
@@ -236,7 +239,7 @@ public class AuthService {
 
         emailVerificationTokenRepository.save(token);
 
-        String link = "https://teu-dominio.com/auth/verify-email?token=" + verificationToken;
+        String link = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
 
         mailService.sendVerificationEmail(user.getEmail(), link);
     }

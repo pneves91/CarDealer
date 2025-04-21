@@ -36,10 +36,6 @@
         </dependency>
 
         <!-- MODULE DEPENDENCIES START -->
-        <dependency>
-            <groupId>com.cardealer</groupId>
-            <artifactId>services</artifactId>
-        </dependency>
         <!-- MODULE DEPENDENCIES END -->
     </dependencies>
 </project>
