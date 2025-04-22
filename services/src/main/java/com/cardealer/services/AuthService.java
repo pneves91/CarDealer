@@ -8,11 +8,13 @@ import com.cardealer.repositories.EmailVerificationTokenRepository;
 import com.cardealer.repositories.PasswordResetTokenRepository;
 import com.cardealer.repositories.TokenRepository;
 import com.cardealer.repositories.UserRepository;
+import com.cardealer.services.constants.AuthConstants;
 import com.cardealer.services.exceptions.EmailAlreadyExistsException;
 import com.cardealer.services.exceptions.InvalidTokenException;
 import com.cardealer.services.security.JwtService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -26,6 +28,7 @@ import java.util.UUID;
 
 import com.cardealer.configs.properties.AppProperties;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
@@ -151,9 +154,12 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
     }
 
+    @Transactional
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        passwordResetTokenRepository.invalidateAllForUser(user);
 
         String resetToken = UUID.randomUUID().toString();
 
@@ -161,16 +167,18 @@ public class AuthService {
                 .token(resetToken)
                 .user(user)
                 .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusHours(1))
+                .expiresAt(LocalDateTime.now().plusHours(AuthConstants.PASSWORD_RESET_TOKEN_EXPIRATION_HOURS))
                 .used(false)
                 .build();
 
         passwordResetTokenRepository.save(token);
 
         String link = appProperties.getFrontendUrl() + "/reset-password?token=" + resetToken;
-
         mailService.sendPasswordResetEmail(user.getEmail(), link);
+
+        log.info("Generated password reset token for user {}: {}", user.getEmail(), resetToken);
     }
+
 
 
     public void resetPassword(String token, String newPassword) {
@@ -222,6 +230,7 @@ public class AuthService {
     }
 
 
+    @Transactional
     public void resendVerificationEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
@@ -230,13 +239,15 @@ public class AuthService {
             throw new RuntimeException("Email is already verified.");
         }
 
+        emailVerificationTokenRepository.invalidateAllForUser(user);
+
         String verificationToken = UUID.randomUUID().toString();
 
         EmailVerificationToken token = EmailVerificationToken.builder()
                 .token(verificationToken)
                 .user(user)
                 .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusHours(24))
+                .expiresAt(LocalDateTime.now().plusHours(AuthConstants.EMAIL_TOKEN_EXPIRATION_HOURS))
                 .used(false)
                 .build();
 
@@ -245,7 +256,10 @@ public class AuthService {
         String link = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
 
         mailService.sendVerificationEmail(user.getEmail(), link);
+
+        log.info("Generated new email verification token for user {}: {}", user.getEmail(), verificationToken);
     }
+
 
 
     private String extractToken(String header) {
