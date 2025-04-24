@@ -1,6 +1,8 @@
 package com.cardealer.services;
 
+import com.cardealer.configs.properties.AppProperties;
 import com.cardealer.models.*;
+import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.LoginRequest;
 import com.cardealer.models.request.auth.RegisterRequest;
 import com.cardealer.models.response.auth.AuthTokensResponse;
@@ -15,8 +17,11 @@ import com.cardealer.services.security.JwtService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -25,8 +30,6 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
-
-import com.cardealer.configs.properties.AppProperties;
 
 @Slf4j
 @Service
@@ -147,11 +150,19 @@ public class AuthService {
         return new AuthTokensResponse(newAccessToken, refreshToken);
     }
 
-    public User getUserProfile(String authorizationHeader) {
-        String token = extractToken(authorizationHeader);
-        String email = jwtService.extractEmail(token);
-        return userRepository.findByEmail(email)
+    public UserResponseDTO getAuthenticatedUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !authentication.isAuthenticated() ||
+                authentication.getPrincipal().equals("anonymousUser")) {
+            throw new AccessDeniedException("Access denied. Please authenticate");
+        }
+
+        String email = authentication.getName();
+        User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        return new UserResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getRole().name());
     }
 
     @Transactional

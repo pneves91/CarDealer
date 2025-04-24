@@ -1,6 +1,6 @@
 package com.cardealer.web;
 
-import com.cardealer.models.User;
+import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.*;
 import com.cardealer.models.response.auth.AuthTokensResponse;
 import com.cardealer.services.AuthService;
@@ -67,9 +67,8 @@ public class AuthController {
 
     // Endpoint para obter informações do utilizador logado
     @GetMapping("/me")
-    public ResponseEntity<User> getProfile(@RequestHeader("Authorization") String authorizationHeader) {
-        User user = authService.getUserProfile(authorizationHeader);
-        return ResponseEntity.ok(user);
+    public ResponseEntity<UserResponseDTO> getProfile() {
+        return ResponseEntity.ok(authService.getAuthenticatedUser());
     }
 
     // Endpoint para realizar refresh do token de acesso
