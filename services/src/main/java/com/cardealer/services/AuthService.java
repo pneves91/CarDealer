@@ -86,7 +86,7 @@ public class AuthService {
                 .orElseThrow();
 
         if (user.getEmailVerifiedAt() == null) {
-            throw new RuntimeException("Email not verified. Please check your inbox.");
+            throw new RuntimeException("Email not verified. Please check your inbox");
         }
 
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
@@ -186,11 +186,11 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidTokenException("Invalid or expired password reset token"));
 
         if (resetToken.isUsed()) {
-            throw new InvalidTokenException("This password reset token has already been used.");
+            throw new InvalidTokenException("This password reset token has already been used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new InvalidTokenException("This password reset token has expired.");
+            throw new InvalidTokenException("This password reset token has expired");
         }
 
         User user = resetToken.getUser();
@@ -236,7 +236,7 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getEmailVerifiedAt() != null) {
-            throw new RuntimeException("Email is already verified.");
+            throw new RuntimeException("Email is already verified");
         }
 
         emailVerificationTokenRepository.invalidateAllForUser(user);
