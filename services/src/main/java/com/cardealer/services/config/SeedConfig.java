@@ -1,9 +1,11 @@
 package com.cardealer.services.config;
 
 import com.cardealer.models.EmailVerificationToken;
+import com.cardealer.models.PasswordResetToken;
 import com.cardealer.models.Role;
 import com.cardealer.models.User;
 import com.cardealer.repositories.EmailVerificationTokenRepository;
+import com.cardealer.repositories.PasswordResetTokenRepository;
 import com.cardealer.repositories.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
@@ -19,7 +21,8 @@ import java.util.List;
 public class SeedConfig {
 
     private final UserRepository userRepository;
-    private final EmailVerificationTokenRepository tokenRepository;
+    private final EmailVerificationTokenRepository emailVerificationTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Bean
@@ -36,6 +39,30 @@ public class SeedConfig {
                         .build();
                 userRepository.save(admin);
             }
+
+            // Inserir tokens de redefinição de senha para testes
+            userRepository.findByEmail("admin@admin.com").ifPresent(admin -> {
+                // Remover tokens existentes
+                passwordResetTokenRepository.findAllByUser(admin).forEach(passwordResetTokenRepository::delete);
+
+                // Token já utilizado
+                PasswordResetToken usedToken = PasswordResetToken.builder()
+                        .token("used-reset-token-123")
+                        .user(admin)
+                        .used(true)
+                        .expiresAt(LocalDateTime.now().plusHours(1))
+                        .build();
+                passwordResetTokenRepository.save(usedToken);
+
+                // Token expirado
+                PasswordResetToken expiredToken = PasswordResetToken.builder()
+                        .token("expired-reset-token-456")
+                        .user(admin)
+                        .used(false)
+                        .expiresAt(LocalDateTime.now().minusHours(1))
+                        .build();
+                passwordResetTokenRepository.save(expiredToken);
+            });
         };
     }
 
@@ -56,8 +83,8 @@ public class SeedConfig {
                     });
 
             // Remover tokens anteriores para evitar conflitos
-            List<EmailVerificationToken> existingTokens = tokenRepository.findAllByUser(user);
-            tokenRepository.deleteAll(existingTokens);
+            List<EmailVerificationToken> existingTokens = emailVerificationTokenRepository.findAllByUser(user);
+            emailVerificationTokenRepository.deleteAll(existingTokens);
 
             // Criar token já usado
             EmailVerificationToken usedToken = EmailVerificationToken.builder()
@@ -77,8 +104,8 @@ public class SeedConfig {
                     .used(false)
                     .build();
 
-            tokenRepository.save(usedToken);
-            tokenRepository.save(expiredToken);
+            emailVerificationTokenRepository.save(usedToken);
+            emailVerificationTokenRepository.save(expiredToken);
         };
     }
 }

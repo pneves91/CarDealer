@@ -194,14 +194,14 @@ public class AuthService {
 
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
-                .orElseThrow(() -> new InvalidTokenException("Invalid or expired password reset token"));
+                .orElseThrow(() -> new InvalidTokenException("Invalid or missing reset token"));
 
         if (resetToken.isUsed()) {
-            throw new InvalidTokenException("This password reset token has already been used");
+            throw new InvalidTokenException("Reset token has already been used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
-            throw new InvalidTokenException("This password reset token has expired");
+            throw new InvalidTokenException("Reset token has expired");
         }
 
         User user = resetToken.getUser();
