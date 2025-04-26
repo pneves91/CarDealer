@@ -34,10 +34,6 @@
             <artifactId>jakarta.servlet-api</artifactId>
             <scope>provided</scope>
         </dependency>
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-        </dependency>
 
         <!-- MODULE DEPENDENCIES START -->
         <!-- MODULE DEPENDENCIES END -->
