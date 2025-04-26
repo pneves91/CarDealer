@@ -39,7 +39,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, "Access denied. Please authenticate.", null);
+        return buildResponse(HttpStatus.UNAUTHORIZED, "Access denied. Please authenticate", null);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)
