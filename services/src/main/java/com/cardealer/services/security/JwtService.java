@@ -2,6 +2,9 @@ package com.cardealer.services.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.security.Key;
@@ -9,64 +12,79 @@ import java.util.Date;
 import java.util.Map;
 import java.util.function.Function;
 
+@Slf4j
 @Service
 public class JwtService {
 
-    private static final String SECRET_KEY = "uma_chave_secreta_muito_forte_para_jwt_que_deve_ter_pelo_menos_256_bits";
+    @Value("${app.jwt.secret}")
+    private String jwtSecret;
 
-    private static final long ACCESS_TOKEN_EXPIRATION = 1000 * 60 * 15; // 15 minutos
-    private static final long REFRESH_TOKEN_EXPIRATION = 1000L * 60 * 60 * 24 * 7; // 7 dias
+    @Value("${app.jwt.expiration}")
+    private long jwtExpiration;
 
-    private Key getSignInKey() {
-        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
-    }
+    private Key key;
 
-    public String generateToken(String subject, Map<String, Object> claims, boolean isRefresh) {
-        long expiration = isRefresh ? REFRESH_TOKEN_EXPIRATION : ACCESS_TOKEN_EXPIRATION;
-        return Jwts.builder()
-                .setClaims(claims)
-                .setSubject(subject)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + expiration))
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
-                .compact();
-    }
-
-    public String generateAccessToken(String email, Map<String, Object> claims) {
-        return generateToken(email, claims, false);
-    }
-
-    public String generateRefreshToken(String email, Map<String, Object> claims) {
-        return generateToken(email, claims, true);
-    }
-
-    public boolean isTokenValid(String token, String expectedEmail) {
-        final String email = extractEmail(token);
-        return email.equals(expectedEmail) && !isTokenExpired(token);
+    @PostConstruct
+    public void init() {
+        this.key = Keys.hmacShaKeyFor(jwtSecret.getBytes());
     }
 
     public String extractEmail(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
+    public boolean isTokenValid(String token, String expectedEmail) {
+        try {
+            final String email = extractEmail(token);
+            return email.equals(expectedEmail) && !isTokenExpired(token);
+        } catch (JwtException e) {
+            log.warn("Invalid JWT token: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    public boolean isTokenExpired(String token) {
+        return extractExpiration(token).before(new Date());
+    }
+
     public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    public <T> T extractClaim(String token, Function<Claims, T> resolver) {
+    public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
-        return resolver.apply(claims);
+        return claimsResolver.apply(claims);
     }
 
     private Claims extractAllClaims(String token) {
         return Jwts.parserBuilder()
-                .setSigningKey(getSignInKey())
+                .setSigningKey(key)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
     }
 
-    private boolean isTokenExpired(String token) {
-        return extractExpiration(token).before(new Date());
+    public String generateAccessToken(String email, Map<String, Object> extraClaims) {
+        return Jwts.builder()
+                .setClaims(extraClaims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public String generateRefreshToken(String email, Map<String, Object> extraClaims) {
+        return Jwts.builder()
+                .setClaims(extraClaims)
+                .setSubject(email)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + (jwtExpiration * 5)))
+                .signWith(key, SignatureAlgorithm.HS256)
+                .compact();
+    }
+
+    public Key getKey() {
+        return this.key;
     }
 }

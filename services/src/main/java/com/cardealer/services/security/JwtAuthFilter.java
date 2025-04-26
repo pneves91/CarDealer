@@ -1,21 +1,25 @@
 package com.cardealer.services.security;
 
-import com.cardealer.models.User;
-import com.cardealer.repositories.TokenRepository;
 import com.cardealer.repositories.UserRepository;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
-import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
-import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
-
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
+import org.springframework.stereotype.Component;
+import org.springframework.web.filter.OncePerRequestFilter;
+
 import java.io.IOException;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -23,7 +27,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
-    private final TokenRepository tokenRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -31,40 +34,61 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
-        final String jwt;
-        final String userEmail;
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        jwt = authHeader.substring(7);
-        userEmail = jwtService.extractEmail(jwt);
+        final String jwt = authHeader.substring(7);
+        String email = null;
 
-        if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            User user = userRepository.findByEmail(userEmail).orElse(null);
-            var token = tokenRepository.findByToken(jwt).orElse(null);
+        try {
+            email = jwtService.extractEmail(jwt);
+        } catch (ExpiredJwtException e) {
+            handleJwtError(response, "JWT token has expired", HttpStatus.UNAUTHORIZED.value());
+            return;
+        } catch (JwtException e) {
+            handleJwtError(response, "Invalid or malformed JWT token", HttpStatus.UNAUTHORIZED.value());
+            return;
+        } catch (Exception e) {
+            handleJwtError(response, "Authentication failed", HttpStatus.UNAUTHORIZED.value());
+            return;
+        }
 
-            boolean tokenValid = token != null && !token.isExpired() && !token.isRevoked();
+        if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+            var user = userRepository.findByEmail(email)
+                    .orElse(null);
 
-            if (user != null && jwtService.isTokenValid(jwt, userEmail) && tokenValid) {
-                UserDetails userDetails = org.springframework.security.core.userdetails.User
-                        .withUsername(user.getEmail())
-                        .password(user.getPassword())
-                        .roles(user.getRole().name())
-                        .build();
-
+            if (user != null && jwtService.isTokenValid(jwt, user.getEmail())) {
                 var authToken = new UsernamePasswordAuthenticationToken(
-                        userDetails,
+                        user.getEmail(),
                         null,
-                        userDetails.getAuthorities()
+                        user.getRole().getAuthorities()
                 );
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+            } else if (user == null) {
+                handleJwtError(response, "User not found", HttpStatus.NOT_FOUND.value());
+                return;
             }
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private void handleJwtError(HttpServletResponse response, String message, int statusCode) throws IOException {
+        response.setStatus(statusCode);
+        response.setContentType("application/json");
+
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("timestamp", LocalDateTime.now().toString());
+        error.put("status", statusCode);
+        error.put("error", HttpStatus.valueOf(statusCode).getReasonPhrase());
+        error.put("message", message);
+        error.put("fieldErrors", null);
+
+        ObjectMapper mapper = new ObjectMapper();
+        response.getWriter().write(mapper.writeValueAsString(error));
     }
 }

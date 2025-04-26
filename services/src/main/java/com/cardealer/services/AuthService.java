@@ -14,6 +14,7 @@ import com.cardealer.services.constants.AuthConstants;
 import com.cardealer.services.exceptions.EmailAlreadyExistsException;
 import com.cardealer.services.exceptions.InvalidTokenException;
 import com.cardealer.services.security.JwtService;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,20 +62,7 @@ public class AuthService {
 
         userRepository.save(user);
 
-        String verificationToken = UUID.randomUUID().toString();
-
-        var emailToken = EmailVerificationToken.builder()
-                .token(verificationToken)
-                .user(user)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusHours(24))
-                .used(false)
-                .build();
-
-        emailVerificationTokenRepository.save(emailToken);
-
-        String verificationLink = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
-        mailService.sendVerificationEmail(user.getEmail(), verificationLink);
+        generateAndSendVerificationToken(user);
     }
 
     public AuthTokensResponse login(LoginRequest loginRequest) {
@@ -86,7 +74,7 @@ public class AuthService {
         authenticationManager.authenticate(authToken);
 
         var user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow();
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getEmailVerifiedAt() == null) {
             throw new RuntimeException("Email not verified. Please check your inbox");
@@ -99,29 +87,6 @@ public class AuthService {
         saveUserToken(user, accessToken);
 
         return new AuthTokensResponse(accessToken, refreshToken);
-    }
-
-    private void saveUserToken(User user, String jwtToken) {
-        var token = Token.builder()
-                .user(user)
-                .token(jwtToken)
-                .expired(false)
-                .revoked(false)
-                .build();
-
-        tokenRepository.save(token);
-    }
-
-    private void revokeAllUserTokens(User user) {
-        List<Token> tokens = tokenRepository.findAllByUser(user);
-        if (tokens.isEmpty()) return;
-
-        tokens.forEach(t -> {
-            t.setRevoked(true);
-            t.setExpired(true);
-        });
-
-        tokenRepository.saveAll(tokens);
     }
 
     public void logout(String authorizationHeader) {
@@ -139,8 +104,9 @@ public class AuthService {
         var user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
-        if (!jwtService.isTokenValid(refreshToken, user.getEmail()))
-            throw new RuntimeException("Invalid refresh token");
+        if (!jwtService.isTokenValid(refreshToken, user.getEmail())) {
+            throw new InvalidTokenException("Invalid refresh token");
+        }
 
         String newAccessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
 
@@ -159,8 +125,13 @@ public class AuthService {
         }
 
         String email = authentication.getName();
+
+        if (email == null || email.isBlank()) {
+            throw new InvalidTokenException("Invalid or expired token");
+        }
+
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new EntityNotFoundException("User not found"));
 
         return new UserResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getRole().name());
     }
@@ -190,8 +161,7 @@ public class AuthService {
         log.info("Generated password reset token for user {}: {}", user.getEmail(), resetToken);
     }
 
-
-
+    @Transactional
     public void resetPassword(String token, String newPassword) {
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing reset token"));
@@ -212,7 +182,7 @@ public class AuthService {
         passwordResetTokenRepository.save(resetToken);
     }
 
-
+    @Transactional
     public AuthTokensResponse verifyEmail(String token) {
         EmailVerificationToken verificationToken = emailVerificationTokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing token"));
@@ -240,7 +210,6 @@ public class AuthService {
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
-
     @Transactional
     public void resendVerificationEmail(String email) {
         User user = userRepository.findByEmail(email)
@@ -252,6 +221,41 @@ public class AuthService {
 
         emailVerificationTokenRepository.invalidateAllForUser(user);
 
+        generateAndSendVerificationToken(user);
+    }
+
+    // --- Métodos privados auxiliares
+
+    private void saveUserToken(User user, String jwtToken) {
+        var token = Token.builder()
+                .user(user)
+                .token(jwtToken)
+                .expired(false)
+                .revoked(false)
+                .build();
+
+        tokenRepository.save(token);
+    }
+
+    private void revokeAllUserTokens(User user) {
+        List<Token> tokens = tokenRepository.findAllByUser(user);
+        if (tokens.isEmpty()) return;
+
+        tokens.forEach(t -> {
+            t.setRevoked(true);
+            t.setExpired(true);
+        });
+
+        tokenRepository.saveAll(tokens);
+    }
+
+    private String extractToken(String header) {
+        if (header == null || !header.startsWith("Bearer "))
+            throw new InvalidTokenException("Invalid or missing token");
+        return header.substring(7);
+    }
+
+    private void generateAndSendVerificationToken(User user) {
         String verificationToken = UUID.randomUUID().toString();
 
         EmailVerificationToken token = EmailVerificationToken.builder()
@@ -265,17 +269,8 @@ public class AuthService {
         emailVerificationTokenRepository.save(token);
 
         String link = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
-
         mailService.sendVerificationEmail(user.getEmail(), link);
 
-        log.info("Generated new email verification token for user {}: {}", user.getEmail(), verificationToken);
-    }
-
-
-
-    private String extractToken(String header) {
-        if (header == null || !header.startsWith("Bearer "))
-            throw new RuntimeException("Token inválido");
-        return header.substring(7);
+        log.info("Generated email verification token for user {}: {}", user.getEmail(), verificationToken);
     }
 }
