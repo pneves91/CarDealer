@@ -50,6 +50,7 @@ public class AuthService {
     @Transactional
     public void register(RegisterRequest registerRequest) {
         if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
+            log.warn("Attempt to register with existing email: {}", registerRequest.getEmail());
             throw new EmailAlreadyExistsException(registerRequest.getEmail());
         }
 
@@ -78,6 +79,7 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getEmailVerifiedAt() == null) {
+            log.warn("Login attempt with unverified email: {}", user.getEmail());
             throw new RuntimeException("Email not verified. Please check your inbox");
         }
 
@@ -87,16 +89,22 @@ public class AuthService {
         revokeAllUserTokens(user);
         saveUserToken(user, accessToken);
 
+        log.info("User logged in successfully: {}", user.getEmail());
+
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
     public void logout(String authorizationHeader) {
         String token = extractToken(authorizationHeader);
-        tokenRepository.findByToken(token).ifPresent(t -> {
-            t.setRevoked(true);
-            t.setExpired(true);
-            tokenRepository.save(t);
-        });
+        tokenRepository.findByToken(token).ifPresentOrElse(
+                t -> {
+                    t.setRevoked(true);
+                    t.setExpired(true);
+                    tokenRepository.save(t);
+                    log.info("Token revoked on logout: {}", token);
+                },
+                () -> log.warn("Attempted logout with invalid or missing token")
+        );
     }
 
     public AuthTokensResponse refreshToken(String accessToken, String refreshToken) {
@@ -106,6 +114,7 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (!jwtService.isTokenValid(refreshToken, user.getEmail())) {
+            log.warn("Invalid refresh token for user: {}", user.getEmail());
             throw new InvalidTokenException("Invalid refresh token");
         }
 
@@ -113,6 +122,8 @@ public class AuthService {
 
         revokeAllUserTokens(user);
         saveUserToken(user, newAccessToken);
+
+        log.info("Refresh token successful for user: {}", user.getEmail());
 
         return new AuthTokensResponse(newAccessToken, refreshToken);
     }
@@ -122,17 +133,21 @@ public class AuthService {
 
         if (authentication == null || !authentication.isAuthenticated() ||
                 authentication.getPrincipal().equals("anonymousUser")) {
+            log.warn("Unauthorized access attempt detected");
             throw new AccessDeniedException("Access denied. Please authenticate");
         }
 
         String email = authentication.getName();
 
         if (email == null || email.isBlank()) {
+            log.error("Authentication context returned invalid email");
             throw new InvalidTokenException("Invalid or expired token");
         }
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new EntityNotFoundException("User not found"));
+
+        log.info("Authenticated user profile fetched: {}", user.getEmail());
 
         return new UserResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getRole().name());
     }
@@ -160,7 +175,6 @@ public class AuthService {
         mailService.sendResetPasswordEmail(user.getEmail(), user.getName(), resetLink);
 
         log.info("Generated password reset token for {}: {}", user.getEmail(), resetToken);
-
     }
 
     @Transactional
@@ -169,10 +183,12 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing reset token"));
 
         if (resetToken.isUsed()) {
+            log.warn("Attempt to reuse a used reset token");
             throw new InvalidTokenException("Reset token has already been used");
         }
 
         if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            log.warn("Attempt to use an expired reset token");
             throw new InvalidTokenException("Reset token has expired");
         }
 
@@ -182,6 +198,8 @@ public class AuthService {
 
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);
+
+        log.info("Password reset successfully for user: {}", user.getEmail());
     }
 
     @Transactional
@@ -190,10 +208,12 @@ public class AuthService {
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing token"));
 
         if (verificationToken.isUsed()) {
+            log.warn("Attempt to reuse an already used email verification token");
             throw new InvalidTokenException("Token has already been used");
         }
 
         if (verificationToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            log.warn("Attempt to use an expired email verification token");
             throw new InvalidTokenException("Token has expired");
         }
 
@@ -209,6 +229,8 @@ public class AuthService {
 
         saveUserToken(user, accessToken);
 
+        log.info("Email verified successfully for user: {}", user.getEmail());
+
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
@@ -218,6 +240,7 @@ public class AuthService {
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getEmailVerifiedAt() != null) {
+            log.warn("Attempted resend of verification email for already verified user: {}", user.getEmail());
             throw new RuntimeException("Email is already verified");
         }
 
@@ -253,8 +276,10 @@ public class AuthService {
     }
 
     private String extractToken(String header) {
-        if (header == null || !header.startsWith("Bearer "))
+        if (header == null || !header.startsWith("Bearer ")) {
+            log.warn("Missing or invalid Authorization header");
             throw new InvalidTokenException("Invalid or missing token");
+        }
         return header.substring(7);
     }
 

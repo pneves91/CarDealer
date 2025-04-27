@@ -9,6 +9,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -36,6 +38,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         final String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            log.debug("Authorization header missing or does not start with Bearer");
             filterChain.doFilter(request, response);
             return;
         }
@@ -46,12 +49,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             email = jwtService.extractEmail(jwt);
         } catch (ExpiredJwtException e) {
+            log.warn("Expired JWT token detected");
             handleJwtError(response, "JWT token has expired", HttpStatus.UNAUTHORIZED.value());
             return;
         } catch (JwtException e) {
+            log.warn("Invalid or malformed JWT token detected");
             handleJwtError(response, "Invalid or malformed JWT token", HttpStatus.UNAUTHORIZED.value());
             return;
         } catch (Exception e) {
+            log.error("Unexpected authentication error", e);
             handleJwtError(response, "Authentication failed", HttpStatus.UNAUTHORIZED.value());
             return;
         }
@@ -68,8 +74,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 );
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+                log.debug("Authenticated user set in SecurityContext: {}", user.getEmail());
             } else if (user == null) {
+                log.warn("User not found for email extracted from token");
                 handleJwtError(response, "User not found", HttpStatus.NOT_FOUND.value());
+                return;
+            } else {
+                log.warn("Token is invalid for user: {}", email);
+                handleJwtError(response, "Invalid token", HttpStatus.UNAUTHORIZED.value());
                 return;
             }
         }

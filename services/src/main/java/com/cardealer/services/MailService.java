@@ -24,29 +24,30 @@ public class MailService {
         String subject = "Verify your email address";
         String content = emailTemplateService.buildEmailVerificationTemplate(name, verificationLink);
         sendHtmlEmail(to, subject, content);
+        log.info("Verification email triggered for {}", to);
     }
 
     public void sendResetPasswordEmail(String to, String name, String resetLink) {
         String subject = "Reset your password";
         String content = emailTemplateService.buildResetPasswordTemplate(name, resetLink);
         sendHtmlEmail(to, subject, content);
+        log.info("Password reset email triggered for {}", to);
     }
 
-    public void sendHtmlEmail(String to, String subject, String htmlContent) {
+    private void sendHtmlEmail(String to, String subject, String htmlContent) {
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
             helper.setTo(to);
             helper.setSubject(subject);
-            helper.setText(htmlContent, true); // true = HTML
+            helper.setText(htmlContent, true); // true = HTML content
 
             mailSender.send(message);
 
-            log.info("HTML email sent to {}", to);
+            log.info("HTML email sent successfully to {}", to);
         } catch (MessagingException e) {
-            log.error("Failed to send HTML email to {}", to, e);
+            log.error("Failed to send HTML email to {}. Error: {}", to, e.getMessage(), e);
             throw new RuntimeException("Failed to send HTML email", e);
         }
     }
-
 }
