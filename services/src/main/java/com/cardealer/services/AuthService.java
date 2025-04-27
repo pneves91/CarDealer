@@ -62,7 +62,8 @@ public class AuthService {
 
         userRepository.save(user);
 
-        generateAndSendVerificationToken(user);
+        String verificationToken = generateAndSendVerificationToken(user);
+        log.info("Generated verification token for {}: {}", user.getEmail(), verificationToken);
     }
 
     public AuthTokensResponse login(LoginRequest loginRequest) {
@@ -155,10 +156,11 @@ public class AuthService {
 
         passwordResetTokenRepository.save(token);
 
-        String link = appProperties.getFrontendUrl() + "/reset-password?token=" + resetToken;
-        mailService.sendPasswordResetEmail(user.getEmail(), link);
+        String resetLink = appProperties.getFrontendUrl() + "/reset-password?token=" + resetToken;
+        mailService.sendResetPasswordEmail(user.getEmail(), user.getName(), resetLink);
 
-        log.info("Generated password reset token for user {}: {}", user.getEmail(), resetToken);
+        log.info("Generated password reset token for {}: {}", user.getEmail(), resetToken);
+
     }
 
     @Transactional
@@ -221,7 +223,8 @@ public class AuthService {
 
         emailVerificationTokenRepository.invalidateAllForUser(user);
 
-        generateAndSendVerificationToken(user);
+        String verificationToken = generateAndSendVerificationToken(user);
+        log.info("Resent verification token for {}: {}", user.getEmail(), verificationToken);
     }
 
     // --- Métodos privados auxiliares
@@ -255,7 +258,7 @@ public class AuthService {
         return header.substring(7);
     }
 
-    private void generateAndSendVerificationToken(User user) {
+    private String generateAndSendVerificationToken(User user) {
         String verificationToken = UUID.randomUUID().toString();
 
         EmailVerificationToken token = EmailVerificationToken.builder()
@@ -268,9 +271,9 @@ public class AuthService {
 
         emailVerificationTokenRepository.save(token);
 
-        String link = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
-        mailService.sendVerificationEmail(user.getEmail(), link);
+        String verificationLink = appProperties.getFrontendUrl() + "/auth/verify-email?token=" + verificationToken;
+        mailService.sendVerificationEmail(user.getEmail(), user.getName(), verificationLink);
 
-        log.info("Generated email verification token for user {}: {}", user.getEmail(), verificationToken);
+        return verificationToken;
     }
 }

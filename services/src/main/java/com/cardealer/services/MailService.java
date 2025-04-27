@@ -1,10 +1,13 @@
 package com.cardealer.services;
 
+import com.cardealer.services.mail.EmailTemplateService;
+import jakarta.mail.MessagingException;
+import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.mail.MailException;
-import org.springframework.mail.SimpleMailMessage;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -14,39 +17,35 @@ public class MailService {
 
     private final JavaMailSender mailSender;
 
-    public void sendVerificationEmail(String to, String verificationLink) {
-        String subject = "Verify your email";
-        String text = String.format(
-                "Please click the following link to verify your email:\n\n%s", verificationLink);
+    @Autowired
+    private EmailTemplateService emailTemplateService;
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
-
-        try {
-            log.info("Enviando email de verificação para {}", to);
-            mailSender.send(message);
-        } catch (MailException e) {
-            log.error("Erro ao enviar email de verificação para {}: {}", to, e.getMessage());
-        }
+    public void sendVerificationEmail(String to, String name, String verificationLink) {
+        String subject = "Verify your email address";
+        String content = emailTemplateService.buildEmailVerificationTemplate(name, verificationLink);
+        sendHtmlEmail(to, subject, content);
     }
 
-    public void sendPasswordResetEmail(String to, String resetLink) {
+    public void sendResetPasswordEmail(String to, String name, String resetLink) {
         String subject = "Reset your password";
-        String text = String.format(
-                "To reset your password, click the following link:\n\n%s", resetLink);
+        String content = emailTemplateService.buildResetPasswordTemplate(name, resetLink);
+        sendHtmlEmail(to, subject, content);
+    }
 
-        SimpleMailMessage message = new SimpleMailMessage();
-        message.setTo(to);
-        message.setSubject(subject);
-        message.setText(text);
-
+    public void sendHtmlEmail(String to, String subject, String htmlContent) {
         try {
-            log.info("Enviando email de redefinição para {}", to);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlContent, true); // true = HTML
+
             mailSender.send(message);
-        } catch (MailException e) {
-            log.error("Erro ao enviar email de redefinição para {}: {}", to, e.getMessage());
+
+            log.info("HTML email sent to {}", to);
+        } catch (MessagingException e) {
+            log.error("Failed to send HTML email to {}", to, e);
+            throw new RuntimeException("Failed to send HTML email", e);
         }
     }
 
