@@ -1,25 +1,28 @@
 package com.cardealer.services.mail;
 
 import org.apache.commons.text.StringSubstitutor;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 @Service
 public class EmailTemplateService {
 
+    private String loadTemplate(String templateName) {
+        try {
+            ClassPathResource resource = new ClassPathResource("templates/" + templateName);
+            byte[] data = resource.getInputStream().readAllBytes();
+            return new String(data, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load email template: " + templateName, e);
+        }
+    }
+
     public String buildEmailVerificationTemplate(String name, String verificationLink) {
-        String template = """
-            <html>
-            <body>
-                <p>Hi ${name},</p>
-                <p>Thank you for registering. Please verify your email by clicking the link below:</p>
-                <p><a href="${link}">Verify Email</a></p>
-                <p>If you did not request this, you can safely ignore this email.</p>
-                <p>Best regards,<br/>CarDealer Team</p>
-            </body>
-            </html>
-            """;
+        String template = loadTemplate("verification-email.html");
 
         Map<String, String> values = Map.of(
                 "name", name,
@@ -30,17 +33,7 @@ public class EmailTemplateService {
     }
 
     public String buildResetPasswordTemplate(String name, String resetLink) {
-        String template = """
-            <html>
-            <body>
-                <p>Hi ${name},</p>
-                <p>You have requested to reset your password. Click the link below to proceed:</p>
-                <p><a href="${link}">Reset Password</a></p>
-                <p>If you did not request this, you can safely ignore this email.</p>
-                <p>Best regards,<br/>CarDealer Team</p>
-            </body>
-            </html>
-            """;
+        String template = loadTemplate("reset-password-email.html");
 
         Map<String, String> values = Map.of(
                 "name", name,
