@@ -6,6 +6,7 @@ import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.LoginRequest;
 import com.cardealer.models.request.auth.RegisterRequest;
 import com.cardealer.models.response.auth.AuthTokensResponse;
+import com.cardealer.models.response.auth.RegisterResponse;
 import com.cardealer.repositories.EmailVerificationTokenRepository;
 import com.cardealer.repositories.PasswordResetTokenRepository;
 import com.cardealer.repositories.TokenRepository;
@@ -48,7 +49,7 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
 
     @Transactional
-    public void register(RegisterRequest registerRequest) {
+    public RegisterResponse register(RegisterRequest registerRequest) {
         if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
             log.warn("Attempt to register with existing email: {}", registerRequest.getEmail());
             throw new EmailAlreadyExistsException(registerRequest.getEmail());
@@ -59,12 +60,15 @@ public class AuthService {
                 .email(registerRequest.getEmail())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .role(Role.USER)
+                .enabled(false)
                 .build();
 
         userRepository.save(user);
 
         String verificationToken = generateAndSendVerificationToken(user);
         log.info("Generated verification token for {}: {}", user.getEmail(), verificationToken);
+
+        return new RegisterResponse("User registered successfully. Please verify your email.");
     }
 
     public AuthTokensResponse login(LoginRequest loginRequest) {

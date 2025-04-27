@@ -3,6 +3,7 @@ package com.cardealer.web;
 import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.*;
 import com.cardealer.models.response.auth.AuthTokensResponse;
+import com.cardealer.models.response.auth.RegisterResponse;
 import com.cardealer.services.AuthService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,9 +19,9 @@ public class AuthController {
 
     // Endpoint para registo de novo utilizador e criação de empresa
     @PostMapping("/register")
-    public ResponseEntity<Void> register(@Valid @RequestBody RegisterRequest registerRequest) {
-        authService.register(registerRequest);
-        return ResponseEntity.ok().build();
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest registerRequest) {
+        RegisterResponse response = authService.register(registerRequest);
+        return ResponseEntity.ok(response);
     }
 
     // Endpoint para verificação de email
