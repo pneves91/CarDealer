@@ -199,6 +199,8 @@ public class AuthService {
         resetToken.setUsed(true);
         passwordResetTokenRepository.save(resetToken);
 
+        revokeAllUserTokens(user);
+
         log.info("Password reset successfully for user: {}", user.getEmail());
     }
 
