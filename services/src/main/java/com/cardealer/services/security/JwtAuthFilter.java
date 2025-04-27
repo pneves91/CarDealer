@@ -1,5 +1,6 @@
 package com.cardealer.services.security;
 
+import com.cardealer.repositories.TokenRepository;
 import com.cardealer.repositories.UserRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -29,6 +30,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
+    private final TokenRepository tokenRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -63,10 +65,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-            var user = userRepository.findByEmail(email)
-                    .orElse(null);
+            var user = userRepository.findByEmail(email).orElse(null);
+            var tokenRecord = tokenRepository.findByToken(jwt).orElse(null);
 
-            if (user != null && jwtService.isTokenValid(jwt, user.getEmail())) {
+            if (user != null
+                    && tokenRecord != null
+                    && !tokenRecord.isExpired()
+                    && !tokenRecord.isRevoked()
+                    && jwtService.isTokenValid(jwt, user.getEmail())) {
+
                 var authToken = new UsernamePasswordAuthenticationToken(
                         user.getEmail(),
                         null,
@@ -74,14 +81,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 );
                 authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authToken);
+
                 log.debug("Authenticated user set in SecurityContext: {}", user.getEmail());
-            } else if (user == null) {
-                log.warn("User not found for email extracted from token");
-                handleJwtError(response, "User not found", HttpStatus.NOT_FOUND.value());
-                return;
             } else {
-                log.warn("Token is invalid for user: {}", email);
-                handleJwtError(response, "Invalid token", HttpStatus.UNAUTHORIZED.value());
+                log.warn("Token invalid or revoked for user: {}", email);
+                handleJwtError(response, "Invalid or revoked token", HttpStatus.UNAUTHORIZED.value());
                 return;
             }
         }
