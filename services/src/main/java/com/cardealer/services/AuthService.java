@@ -18,13 +18,12 @@ import com.cardealer.services.exceptions.InvalidTokenException;
 import com.cardealer.services.exceptions.UnauthorizedException;
 import com.cardealer.services.exceptions.UserNotFoundException;
 import com.cardealer.services.security.JwtService;
-import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -82,10 +81,15 @@ public class AuthService {
                 loginRequest.getPassword()
         );
 
-        authenticationManager.authenticate(authToken);
+        try {
+            authenticationManager.authenticate(authToken);
+        } catch (BadCredentialsException ex) {
+            log.warn("Failed login attempt with bad credentials for email: {}", loginRequest.getEmail());
+            throw new UnauthorizedException("Invalid email or password");
+        }
 
         var user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new IllegalStateException("Unexpected error: user should exist after authentication"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (user.getEmailVerifiedAt() == null) {
             log.warn("Login attempt with unverified email: {}", user.getEmail());
@@ -97,11 +101,13 @@ public class AuthService {
 
         revokeAllUserTokens(user);
         saveUserToken(user, accessToken);
+        saveUserToken(user, refreshToken);
 
         log.info("User logged in successfully: {}", user.getEmail());
 
         return new AuthTokensResponse(accessToken, refreshToken);
     }
+
 
 
     public void logout(String authorizationHeader) {
@@ -123,27 +129,38 @@ public class AuthService {
         );
     }
 
-
+    @Transactional
     public AuthTokensResponse refreshToken(String accessToken, String refreshToken) {
         String email = jwtService.extractEmail(refreshToken);
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException(email));
 
-        if (!jwtService.isTokenValid(refreshToken, user.getEmail())) {
-            log.warn("Invalid refresh token for user: {}", user.getEmail());
-            throw new InvalidTokenException("Invalid refresh token");
+        if (!jwtService.isTokenValid(refreshToken, email)) {
+            log.warn("Invalid or expired refresh token for user: {}", email);
+            throw new InvalidTokenException("Invalid or expired refresh token");
         }
 
-        String newAccessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
+        Token storedToken = tokenRepository.findByToken(refreshToken)
+                .orElseThrow(() -> new InvalidTokenException("Invalid or expired refresh token"));
+
+        if (storedToken.isExpired() || storedToken.isRevoked()) {
+            log.warn("Refresh token is expired or revoked for user: {}", email);
+            throw new InvalidTokenException("Invalid or expired refresh token");
+        }
 
         revokeAllUserTokens(user);
+
+        String newAccessToken = jwtService.generateAccessToken(email, new HashMap<>());
+        String newRefreshToken = jwtService.generateRefreshToken(email, new HashMap<>());
+
         saveUserToken(user, newAccessToken);
+        saveUserToken(user, newRefreshToken);
 
-        log.info("Refresh token successful for user: {}", user.getEmail());
-
-        return new AuthTokensResponse(newAccessToken, refreshToken);
+        log.info("Refresh token accepted. New tokens issued for user: {}", email);
+        return new AuthTokensResponse(newAccessToken, newRefreshToken);
     }
+
 
     public UserResponseDTO getAuthenticatedUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -208,6 +225,10 @@ public class AuthService {
         }
 
         User user = resetToken.getUser();
+
+        userRepository.findByEmail(user.getEmail())
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
         user.setPassword(passwordEncoder.encode(newPassword));
         userRepository.save(user);
 
@@ -249,6 +270,7 @@ public class AuthService {
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
 
         saveUserToken(user, accessToken);
+        saveUserToken(user, refreshToken);
 
         log.info("Email verified successfully for user: {}", user.getEmail());
 
