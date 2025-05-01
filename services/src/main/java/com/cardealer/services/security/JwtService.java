@@ -36,7 +36,11 @@ public class JwtService {
     public boolean isTokenValid(String token, String expectedEmail) {
         try {
             final String email = extractEmail(token);
-            return email.equals(expectedEmail) && !isTokenExpired(token);
+            boolean valid = email.equals(expectedEmail) && !isTokenExpired(token);
+            if (!valid) {
+                log.debug("Token is invalid or expired for email: {}", expectedEmail);
+            }
+            return valid;
         } catch (JwtException e) {
             log.warn("Invalid JWT token: {}", e.getMessage());
             return false;
@@ -65,21 +69,22 @@ public class JwtService {
     }
 
     public String generateAccessToken(String email, Map<String, Object> extraClaims) {
-        return Jwts.builder()
-                .setClaims(extraClaims)
-                .setSubject(email)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + jwtExpiration))
-                .signWith(key, SignatureAlgorithm.HS256)
-                .compact();
+        return buildToken(email, extraClaims, jwtExpiration);
     }
 
     public String generateRefreshToken(String email, Map<String, Object> extraClaims) {
+        return buildToken(email, extraClaims, jwtExpiration * 5);
+    }
+
+    private String buildToken(String email, Map<String, Object> extraClaims, long expirationMillis) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + expirationMillis);
+
         return Jwts.builder()
                 .setClaims(extraClaims)
                 .setSubject(email)
-                .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + (jwtExpiration * 5)))
+                .setIssuedAt(now)
+                .setExpiration(expiry)
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }

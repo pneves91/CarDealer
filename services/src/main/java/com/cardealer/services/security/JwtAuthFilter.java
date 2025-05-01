@@ -2,15 +2,16 @@ package com.cardealer.services.security;
 
 import com.cardealer.repositories.TokenRepository;
 import com.cardealer.repositories.UserRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.SignatureException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,8 +21,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -37,74 +36,77 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain) throws ServletException, IOException {
 
-        final String authHeader = request.getHeader("Authorization");
+        final String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
 
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            log.debug("Authorization header missing or does not start with Bearer");
+            log.debug("No JWT token provided in Authorization header");
             filterChain.doFilter(request, response);
             return;
         }
 
         final String jwt = authHeader.substring(7);
-        String email = null;
+        String email;
 
         try {
             email = jwtService.extractEmail(jwt);
         } catch (ExpiredJwtException e) {
-            log.warn("Expired JWT token detected");
-            handleJwtError(response, "JWT token has expired", HttpStatus.UNAUTHORIZED.value());
+            log.warn("JWT expired: {}", e.getMessage());
+            handleError(response, HttpServletResponse.SC_UNAUTHORIZED, "JWT token has expired");
             return;
-        } catch (JwtException e) {
-            log.warn("Invalid or malformed JWT token detected");
-            handleJwtError(response, "Invalid or malformed JWT token", HttpStatus.UNAUTHORIZED.value());
-            return;
-        } catch (Exception e) {
-            log.error("Unexpected authentication error", e);
-            handleJwtError(response, "Authentication failed", HttpStatus.UNAUTHORIZED.value());
+        } catch (MalformedJwtException | SignatureException | IllegalArgumentException e) {
+            log.warn("Invalid JWT: {}", e.getMessage());
+            handleError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or malformed JWT token");
             return;
         }
 
         if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
             var user = userRepository.findByEmail(email).orElse(null);
-            var tokenRecord = tokenRepository.findByToken(jwt).orElse(null);
 
-            if (user != null
-                    && tokenRecord != null
-                    && !tokenRecord.isExpired()
-                    && !tokenRecord.isRevoked()
-                    && jwtService.isTokenValid(jwt, user.getEmail())) {
-
-                var authToken = new UsernamePasswordAuthenticationToken(
-                        user.getEmail(),
-                        null,
-                        user.getRole().getAuthorities()
-                );
-                authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                SecurityContextHolder.getContext().setAuthentication(authToken);
-
-                log.debug("Authenticated user set in SecurityContext: {}", user.getEmail());
-            } else {
-                log.warn("Token invalid or revoked for user: {}", email);
-                handleJwtError(response, "Invalid or revoked token", HttpStatus.UNAUTHORIZED.value());
+            if (user == null) {
+                log.warn("Token is valid but user not found: {}", email);
+                handleError(response, HttpServletResponse.SC_NOT_FOUND, "User not found with email: " + email);
                 return;
             }
+
+            var tokenRecord = tokenRepository.findByToken(jwt).orElse(null);
+
+            boolean isValid = tokenRecord != null
+                    && !tokenRecord.isExpired()
+                    && !tokenRecord.isRevoked()
+                    && jwtService.isTokenValid(jwt, user.getEmail());
+
+            if (!isValid) {
+                log.warn("Invalid or revoked token for user: {}", email);
+                handleError(response, HttpServletResponse.SC_UNAUTHORIZED, "Invalid or revoked token");
+                return;
+            }
+
+            var authToken = new UsernamePasswordAuthenticationToken(
+                    user.getEmail(),
+                    null,
+                    user.getRole().getAuthorities()
+            );
+            authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+            SecurityContextHolder.getContext().setAuthentication(authToken);
+
+            log.debug("Authentication successful for user: {}", user.getEmail());
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private void handleJwtError(HttpServletResponse response, String message, int statusCode) throws IOException {
+    private void handleError(HttpServletResponse response, int statusCode, String message) throws IOException {
         response.setStatus(statusCode);
         response.setContentType("application/json");
-
-        Map<String, Object> error = new LinkedHashMap<>();
-        error.put("timestamp", LocalDateTime.now().toString());
-        error.put("status", statusCode);
-        error.put("error", HttpStatus.valueOf(statusCode).getReasonPhrase());
-        error.put("message", message);
-        error.put("fieldErrors", null);
-
-        ObjectMapper mapper = new ObjectMapper();
-        response.getWriter().write(mapper.writeValueAsString(error));
+        String body = String.format("""
+            {
+                "timestamp": "%s",
+                "status": %d,
+                "error": "%s",
+                "message": "%s",
+                "fieldErrors": null
+            }
+            """, LocalDateTime.now(), statusCode, HttpStatus.valueOf(statusCode).getReasonPhrase(), message);
+        response.getWriter().write(body);
     }
 }

@@ -1,6 +1,7 @@
 package com.cardealer.services;
 
 import com.cardealer.configs.properties.AppProperties;
+import com.cardealer.mappers.UserMapper;
 import com.cardealer.models.*;
 import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.LoginRequest;
@@ -14,12 +15,15 @@ import com.cardealer.repositories.UserRepository;
 import com.cardealer.services.constants.AuthConstants;
 import com.cardealer.services.exceptions.EmailAlreadyExistsException;
 import com.cardealer.services.exceptions.InvalidTokenException;
+import com.cardealer.services.exceptions.UnauthorizedException;
+import com.cardealer.services.exceptions.UserNotFoundException;
 import com.cardealer.services.security.JwtService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -47,6 +51,7 @@ public class AuthService {
     private final MailService mailService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final UserMapper userMapper;
 
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
@@ -80,11 +85,11 @@ public class AuthService {
         authenticationManager.authenticate(authToken);
 
         var user = userRepository.findByEmail(loginRequest.getEmail())
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new IllegalStateException("Unexpected error: user should exist after authentication"));
 
         if (user.getEmailVerifiedAt() == null) {
             log.warn("Login attempt with unverified email: {}", user.getEmail());
-            throw new RuntimeException("Email not verified. Please check your inbox");
+            throw new UnauthorizedException("Email not verified. Please check your inbox");
         }
 
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
@@ -98,8 +103,15 @@ public class AuthService {
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
+
     public void logout(String authorizationHeader) {
-        String token = extractToken(authorizationHeader);
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            log.warn("Missing or invalid Authorization header during logout");
+            throw new InvalidTokenException("Invalid or missing token");
+        }
+
+        String token = authorizationHeader.substring(7);
+
         tokenRepository.findByToken(token).ifPresentOrElse(
                 t -> {
                     t.setRevoked(true);
@@ -107,15 +119,16 @@ public class AuthService {
                     tokenRepository.save(t);
                     log.info("Token revoked on logout: {}", token);
                 },
-                () -> log.warn("Attempted logout with invalid or missing token")
+                () -> log.warn("Attempted logout with invalid or missing token: {}", token)
         );
     }
+
 
     public AuthTokensResponse refreshToken(String accessToken, String refreshToken) {
         String email = jwtService.extractEmail(refreshToken);
 
-        var user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new UserNotFoundException(email));
 
         if (!jwtService.isTokenValid(refreshToken, user.getEmail())) {
             log.warn("Invalid refresh token for user: {}", user.getEmail());
@@ -136,30 +149,28 @@ public class AuthService {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated() ||
-                authentication.getPrincipal().equals("anonymousUser")) {
+                authentication instanceof AnonymousAuthenticationToken) {
             log.warn("Unauthorized access attempt detected");
-            throw new AccessDeniedException("Access denied. Please authenticate");
+            throw new UnauthorizedException("Access denied. Please authenticate");
         }
 
         String email = authentication.getName();
-
         if (email == null || email.isBlank()) {
             log.error("Authentication context returned invalid email");
             throw new InvalidTokenException("Invalid or expired token");
         }
 
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new EntityNotFoundException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(email));
 
-        log.info("Authenticated user profile fetched: {}", user.getEmail());
-
-        return new UserResponseDTO(user.getId(), user.getName(), user.getEmail(), user.getRole().name());
+        return userMapper.toResponse(user);
     }
+
 
     @Transactional
     public void forgotPassword(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(email));
 
         passwordResetTokenRepository.invalidateAllForUser(user);
 
@@ -210,6 +221,10 @@ public class AuthService {
 
     @Transactional
     public AuthTokensResponse verifyEmail(String token) {
+        if (token == null || token.isBlank()) {
+            throw new InvalidTokenException("Missing verification token");
+        }
+
         EmailVerificationToken verificationToken = emailVerificationTokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing token"));
 
@@ -243,11 +258,11 @@ public class AuthService {
     @Transactional
     public void resendVerificationEmail(String email) {
         User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UserNotFoundException(email));
 
         if (user.getEmailVerifiedAt() != null) {
             log.warn("Attempted resend of verification email for already verified user: {}", user.getEmail());
-            throw new RuntimeException("Email is already verified");
+            throw new InvalidTokenException("Email is already verified");
         }
 
         emailVerificationTokenRepository.invalidateAllForUser(user);
@@ -256,7 +271,7 @@ public class AuthService {
         log.info("Resent verification token for {}: {}", user.getEmail(), verificationToken);
     }
 
-    // --- Métodos privados auxiliares
+    // --- Private helpers
 
     private void saveUserToken(User user, String jwtToken) {
         var token = Token.builder()

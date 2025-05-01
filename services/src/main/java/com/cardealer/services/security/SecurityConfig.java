@@ -30,17 +30,28 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
+                // Desativa CSRF pois estamos a usar JWT
                 .csrf(csrf -> csrf.disable())
+
+                // Define sessão como stateless (não guardamos sessão no servidor)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**").permitAll()
-                        .requestMatchers("/h2-console/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/cars/**").permitAll()
-                        .anyRequest().authenticated()
-                )
+
+                // Permite usar a H2 console em modo dev (caso necessário)
                 .headers(headers -> headers.frameOptions(frameOptions -> frameOptions.disable()))
+
+                // Define o entry point personalizado para lidar com 401 (sem autenticação)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(customAuthenticationEntryPoint))
+
+                // Define regras de autorização para os endpoints
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/auth/**").permitAll()          // Endpoints públicos para login/register/etc
+                        .requestMatchers("/h2-console/**").permitAll()     // Console do H2 (apenas em dev)
+                        .anyRequest().authenticated()                      // Todos os restantes requerem autenticação
+                )
+
+                // Aplica o filtro JWT antes do filtro de autenticação padrão
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+
                 .build();
     }
 
@@ -63,6 +74,6 @@ public class SecurityConfig {
                         .roles(user.getRole().name())
                         .build()
                 )
-                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+                .orElseThrow(() -> new UsernameNotFoundException("User not found with email: " + email));
     }
 }

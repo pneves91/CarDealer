@@ -47,9 +47,9 @@ public class AuthController {
 
     // Endpoint para logout (revogação do token)
     @PostMapping("/logout")
-    public ResponseEntity<Void> logout(@RequestHeader("Authorization") String authorizationHeader) {
+    public ResponseEntity<Void> logout(@RequestHeader(value = "Authorization", required = false) String authorizationHeader) {
         authService.logout(authorizationHeader);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.ok().build();
     }
 
     // Endpoint para recuperação de senha (envia link de recuperação)
@@ -68,7 +68,7 @@ public class AuthController {
 
     // Endpoint para obter informações do utilizador logado
     @GetMapping("/me")
-    public ResponseEntity<UserResponseDTO> getProfile() {
+    public ResponseEntity<UserResponseDTO> me() {
         return ResponseEntity.ok(authService.getAuthenticatedUser());
     }
 

@@ -1,17 +1,18 @@
 package com.cardealer.web.responses;
 
-import lombok.Builder;
-import lombok.Data;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 
 import java.time.LocalDateTime;
 import java.util.Map;
 
-@Data
-@Builder
+@Getter
+@AllArgsConstructor
 public class ErrorResponse {
-    private LocalDateTime timestamp;
-    private int status;
-    private String error;
-    private String message;
-    private Map<String, String> fieldErrors;
+
+    private final LocalDateTime timestamp;
+    private final int status;
+    private final String error;
+    private final String message;
+    private final Map<String, String> fieldErrors;
 }
