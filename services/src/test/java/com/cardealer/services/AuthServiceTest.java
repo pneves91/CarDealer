@@ -137,7 +137,7 @@ class AuthServiceTest {
         assertNotNull(response);
         verify(emailVerificationTokenRepository).findByToken(token);
         verify(userRepository).save(user);
-        verify(tokenRepository).save(any());
+        verify(tokenRepository, times(2)).save(any());
     }
 
     @Test
@@ -282,7 +282,7 @@ class AuthServiceTest {
         verify(userRepository).findByEmail(email);
         verify(jwtService).generateAccessToken(eq(email), anyMap());
         verify(jwtService).generateRefreshToken(eq(email), anyMap());
-        verify(tokenRepository).save(any());
+        verify(tokenRepository, times(2)).save(any());
     }
 
     @Test
@@ -436,10 +436,14 @@ class AuthServiceTest {
     // === ME ===
 
     @Test
-    void shouldReturnAuthenticatedUserSuccessfully() {}
+    void shouldReturnAuthenticatedUserSuccessfully() {
+        //TODO
+    }
 
     @Test
-    void shouldFailIfUserNotFoundInSecurityContext() {}
+    void shouldFailIfUserNotFoundInSecurityContext() {
+        //TODO
+    }
 
     // === FORGOT PASSWORD ===
 

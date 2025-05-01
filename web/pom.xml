@@ -12,6 +12,7 @@
     <artifactId>web</artifactId>
 
     <dependencies>
+        <!-- Spring Dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -20,19 +21,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+
+        <!-- Testing Dependencies -->
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Provided Dependencies -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
 
-
-        <!-- MODULE DEPENDENCIES START -->
+        <!-- Module Dependencies -->
         <dependency>
             <groupId>com.cardealer</groupId>
             <artifactId>models</artifactId>
@@ -41,6 +45,5 @@
             <groupId>com.cardealer</groupId>
             <artifactId>services</artifactId>
         </dependency>
-        <!-- MODULE DEPENDENCIES END -->
     </dependencies>
 </project>

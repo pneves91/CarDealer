@@ -12,6 +12,7 @@
     <artifactId>mappers</artifactId>
 
     <dependencies>
+        <!-- MapStruct Dependencies -->
         <dependency>
             <groupId>org.mapstruct</groupId>
             <artifactId>mapstruct</artifactId>
@@ -22,16 +23,16 @@
             <scope>provided</scope>
         </dependency>
 
-        <!-- MODULE DEPENDENCIES START -->
+        <!-- Module Dependencies -->
         <dependency>
             <groupId>com.cardealer</groupId>
             <artifactId>models</artifactId>
         </dependency>
-        <!-- MODULE DEPENDENCIES END -->
     </dependencies>
 
     <build>
         <plugins>
+            <!-- Compiler Plugin for MapStruct -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -55,5 +56,4 @@
             </plugin>
         </plugins>
     </build>
-
 </project>

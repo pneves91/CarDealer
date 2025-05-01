@@ -12,6 +12,7 @@
     <artifactId>models</artifactId>
 
     <dependencies>
+        <!-- Spring Dependencies -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
@@ -25,13 +26,14 @@
             <artifactId>spring-security-core</artifactId>
         </dependency>
 
+        <!-- Provided Dependencies -->
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <scope>provided</scope>
         </dependency>
 
-        <!-- MODULE DEPENDENCIES START -->
-        <!-- MODULE DEPENDENCIES END -->
+        <!-- Module Dependencies -->
+        <!-- No module dependencies in this file -->
     </dependencies>
 </project>
