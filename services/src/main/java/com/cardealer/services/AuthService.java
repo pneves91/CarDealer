@@ -108,8 +108,6 @@ public class AuthService {
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
-
-
     public void logout(String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             log.warn("Missing or invalid Authorization header during logout");
@@ -127,10 +125,12 @@ public class AuthService {
                 },
                 () -> log.warn("Attempted logout with invalid or missing token: {}", token)
         );
+
+        revokeAllUserTokensAssociatedWithAccessToken(token);
     }
 
     @Transactional
-    public AuthTokensResponse refreshToken(String accessToken, String refreshToken) {
+    public AuthTokensResponse refreshToken(String refreshToken) {
         String email = jwtService.extractEmail(refreshToken);
 
         User user = userRepository.findByEmail(email)
@@ -161,7 +161,6 @@ public class AuthService {
         return new AuthTokensResponse(newAccessToken, newRefreshToken);
     }
 
-
     public UserResponseDTO getAuthenticatedUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
@@ -182,7 +181,6 @@ public class AuthService {
 
         return userMapper.toResponse(user);
     }
-
 
     @Transactional
     public void forgotPassword(String email) {
@@ -343,5 +341,14 @@ public class AuthService {
         mailService.sendVerificationEmail(user.getEmail(), user.getName(), verificationLink);
 
         return verificationToken;
+    }
+
+    private void revokeAllUserTokensAssociatedWithAccessToken(String token) {
+        // Encontra o usuário do token, revoga todos os tokens dele
+        Token accessToken = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Token not found"));
+
+        User user = accessToken.getUser(); // Supondo que cada token tem um usuário associado
+        revokeAllUserTokens(user); // Revoga todos os tokens do usuário
     }
 }

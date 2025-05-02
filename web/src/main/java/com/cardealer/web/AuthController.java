@@ -75,7 +75,7 @@ public class AuthController {
     // Endpoint para realizar refresh do token de acesso
     @PostMapping("/refresh-token")
     public ResponseEntity<AuthTokensResponse> refreshToken(@Valid @RequestBody RefreshTokenRequest refreshTokenRequest) {
-        AuthTokensResponse refreshedAuthTokensResponse = authService.refreshToken(refreshTokenRequest.getAccessToken(), refreshTokenRequest.getRefreshToken());
+        AuthTokensResponse refreshedAuthTokensResponse = authService.refreshToken(refreshTokenRequest.getRefreshToken());
         return ResponseEntity.ok(refreshedAuthTokensResponse);
     }
 }

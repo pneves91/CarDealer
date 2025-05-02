@@ -353,96 +353,8 @@ class AuthServiceTest {
         // Assert
         assertTrue(userToken.isRevoked());
         assertTrue(userToken.isExpired());
-        verify(tokenRepository).findByToken("dummy-token");
+        verify(tokenRepository, times(2)).findByToken("dummy-token");
         verify(tokenRepository).save(userToken);
-    }
-
-    // === REFRESH TOKEN ===
-
-    @Test
-    void shouldRefreshTokenSuccessfully() {
-        String refreshToken = "valid-refresh-token";
-        String accessToken = "old-access-token";
-        String email = "test@example.com";
-
-        User user = TestUserFactory.createTestUser();
-        Token validToken = Token.builder()
-                .token(refreshToken)
-                .user(user)
-                .expired(false)
-                .revoked(false)
-                .build();
-
-        when(jwtService.extractEmail(refreshToken)).thenReturn(email);
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
-        when(jwtService.isTokenValid(refreshToken, email)).thenReturn(true);
-        when(tokenRepository.findByToken(refreshToken)).thenReturn(Optional.of(validToken));
-        when(jwtService.generateAccessToken(eq(email), anyMap())).thenReturn("new-access-token");
-        when(jwtService.generateRefreshToken(eq(email), anyMap())).thenReturn("new-refresh-token");
-
-        AuthTokensResponse response = authService.refreshToken(accessToken, refreshToken);
-
-        assertEquals("new-access-token", response.getAccessToken());
-        assertEquals("new-refresh-token", response.getRefreshToken());
-
-        verify(jwtService).extractEmail(refreshToken);
-        verify(userRepository).findByEmail(email);
-        verify(jwtService).isTokenValid(refreshToken, email);
-        verify(tokenRepository).findByToken(refreshToken);
-        verify(tokenRepository, times(2)).save(any(Token.class));
-    }
-
-    @Test
-    void shouldFailRefreshIfUserNotFound() {
-        String refreshToken = "dummy-refresh-token";
-        String bearerRefreshToken = "Bearer " + refreshToken;
-        String email = "ghost@example.com";
-
-        when(jwtService.extractEmail(bearerRefreshToken)).thenReturn(email);
-        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
-
-        UserNotFoundException ex = assertThrows(UserNotFoundException.class, () -> {
-            authService.refreshToken("dummy-access-token", bearerRefreshToken);
-        });
-
-        assertEquals("User not found with email: ghost@example.com", ex.getMessage());
-        verify(jwtService).extractEmail(bearerRefreshToken);
-        verify(userRepository).findByEmail(email);
-    }
-
-    @Test
-    void shouldFailRefreshIfTokenInvalidOrRevoked() {
-        String refreshToken = "revoked-token";
-        String accessToken = "any-access-token";
-        String email = "test@example.com";
-
-        User user = TestUserFactory.createTestUser();
-
-        when(jwtService.extractEmail(refreshToken)).thenReturn(email);
-        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
-        when(jwtService.isTokenValid(refreshToken, email)).thenReturn(false);
-
-        InvalidTokenException ex = assertThrows(InvalidTokenException.class, () -> {
-            authService.refreshToken(accessToken, refreshToken);
-        });
-
-        assertEquals("Invalid or expired refresh token", ex.getMessage());
-
-        verify(jwtService).extractEmail(refreshToken);
-        verify(userRepository).findByEmail(email);
-        verify(jwtService).isTokenValid(refreshToken, email);
-    }
-
-    // === ME ===
-
-    @Test
-    void shouldReturnAuthenticatedUserSuccessfully() {
-        //TODO
-    }
-
-    @Test
-    void shouldFailIfUserNotFoundInSecurityContext() {
-        //TODO
     }
 
     // === FORGOT PASSWORD ===
@@ -549,6 +461,91 @@ class AuthServiceTest {
         verify(passwordResetTokenRepository).findByToken(token);
         verify(userRepository, never()).findByEmail(email);
         verify(userRepository, never()).save(any(User.class));
+    }
+
+    // === REFRESH TOKEN ===
+
+    @Test
+    void shouldRefreshTokenSuccessfully() {
+        String refreshToken = "valid-refresh-token";
+        String email = "test@example.com";
+
+        User user = TestUserFactory.createTestUser();
+        Token validToken = Token.builder()
+                .token(refreshToken)
+                .user(user)
+                .expired(false)
+                .revoked(false)
+                .build();
+
+        when(jwtService.extractEmail(refreshToken)).thenReturn(email);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.isTokenValid(refreshToken, email)).thenReturn(true);
+        when(tokenRepository.findByToken(refreshToken)).thenReturn(Optional.of(validToken));
+        when(jwtService.generateAccessToken(eq(email), anyMap())).thenReturn("new-access-token");
+        when(jwtService.generateRefreshToken(eq(email), anyMap())).thenReturn("new-refresh-token");
+
+        AuthTokensResponse response = authService.refreshToken(refreshToken);
+
+        assertEquals("new-access-token", response.getAccessToken());
+        assertEquals("new-refresh-token", response.getRefreshToken());
+
+        verify(jwtService).extractEmail(refreshToken);
+        verify(userRepository).findByEmail(email);
+        verify(jwtService).isTokenValid(refreshToken, email);
+        verify(tokenRepository).findByToken(refreshToken);
+        verify(tokenRepository, times(2)).save(any(Token.class));
+    }
+
+    @Test
+    void shouldFailRefreshIfUserNotFound() {
+        String refreshToken = "dummy-refresh-token";
+        String email = "ghost@example.com";
+
+        when(jwtService.extractEmail(refreshToken)).thenReturn(email);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+
+        UserNotFoundException ex = assertThrows(UserNotFoundException.class, () -> {
+            authService.refreshToken(refreshToken);
+        });
+
+        assertEquals("User not found with email: ghost@example.com", ex.getMessage());
+        verify(jwtService).extractEmail(refreshToken);
+        verify(userRepository).findByEmail(email);
+    }
+
+    @Test
+    void shouldFailRefreshIfTokenInvalidOrRevoked() {
+        String refreshToken = "revoked-token";
+        String email = "test@example.com";
+
+        User user = TestUserFactory.createTestUser();
+
+        when(jwtService.extractEmail(refreshToken)).thenReturn(email);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.isTokenValid(refreshToken, email)).thenReturn(false);
+
+        InvalidTokenException ex = assertThrows(InvalidTokenException.class, () -> {
+            authService.refreshToken(refreshToken);
+        });
+
+        assertEquals("Invalid or expired refresh token", ex.getMessage());
+
+        verify(jwtService).extractEmail(refreshToken);
+        verify(userRepository).findByEmail(email);
+        verify(jwtService).isTokenValid(refreshToken, email);
+    }
+
+    // === ME ===
+
+    @Test
+    void shouldReturnAuthenticatedUserSuccessfully() {
+        //TODO
+    }
+
+    @Test
+    void shouldFailIfUserNotFoundInSecurityContext() {
+        //TODO
     }
 
 }
