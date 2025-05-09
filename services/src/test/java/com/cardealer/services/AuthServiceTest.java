@@ -1,10 +1,12 @@
 package com.cardealer.services;
 
 import com.cardealer.configs.properties.AppProperties;
+import com.cardealer.mappers.UserMapper;
 import com.cardealer.models.EmailVerificationToken;
 import com.cardealer.models.PasswordResetToken;
 import com.cardealer.models.Token;
 import com.cardealer.models.User;
+import com.cardealer.models.dto.UserResponseDTO;
 import com.cardealer.models.request.auth.LoginRequest;
 import com.cardealer.models.request.auth.RegisterRequest;
 import com.cardealer.models.response.auth.AuthTokensResponse;
@@ -23,9 +25,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
@@ -38,6 +44,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 
+    @Mock
+    private UserMapper userMapper;
     @Mock
     private UserRepository userRepository;
     @Mock
@@ -540,12 +548,113 @@ class AuthServiceTest {
 
     @Test
     void shouldReturnAuthenticatedUserSuccessfully() {
-        //TODO
+        // Arrange
+        String email = "user@user.com";
+
+        User mockUser = TestUserFactory.createTestUser();
+        mockUser.setEmail(email);
+
+        UserResponseDTO expectedDto = new UserResponseDTO(
+                mockUser.getId(),
+                mockUser.getName(),
+                mockUser.getEmail(),
+                mockUser.getRole().name()
+        );
+
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn(email);
+        when(authentication.isAuthenticated()).thenReturn(true);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(securityContext);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(mockUser));
+        when(userMapper.toResponse(mockUser)).thenReturn(expectedDto);
+
+        // Act
+        UserResponseDTO result = authService.getAuthenticatedUser();
+
+        // Assert
+        assertNotNull(result);
+        assertEquals(expectedDto.getId(), result.getId());
+        assertEquals(expectedDto.getName(), result.getName());
+        assertEquals(expectedDto.getEmail(), result.getEmail());
+        assertEquals(expectedDto.getRole(), result.getRole());
     }
 
     @Test
-    void shouldFailIfUserNotFoundInSecurityContext() {
-        //TODO
+    void shouldFailIfAuthenticatedUserNotFoundInDatabase() {
+        // Arrange
+        String email = "nonexistent@user.com";
+
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.getName()).thenReturn(email);
+        when(authentication.isAuthenticated()).thenReturn(true);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(securityContext);
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.empty());
+
+        // Act & Assert
+        UserNotFoundException exception = assertThrows(UserNotFoundException.class, () -> {
+            authService.getAuthenticatedUser();
+        });
+
+        assertEquals("User not found with email: " + email, exception.getMessage());
+    }
+
+    @Test
+    void shouldFailIfUserNotAuthenticated() {
+        // Arrange
+        Authentication authentication = mock(Authentication.class);
+        when(authentication.isAuthenticated()).thenReturn(false);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(securityContext);
+
+        // Act & Assert
+        UnauthorizedException exception = assertThrows(UnauthorizedException.class, () -> {
+            authService.getAuthenticatedUser();
+        });
+
+        assertEquals("Access denied. Please authenticate", exception.getMessage());
+    }
+
+    @Test
+    void shouldFailIfAuthenticationIsNull() {
+        // Arrange
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(null);
+        SecurityContextHolder.setContext(securityContext);
+
+        // Act & Assert
+        UnauthorizedException exception = assertThrows(UnauthorizedException.class, () -> {
+            authService.getAuthenticatedUser();
+        });
+
+        assertEquals("Access denied. Please authenticate", exception.getMessage());
+    }
+
+    @Test
+    void shouldFailIfAuthenticationIsAnonymous() {
+        // Arrange
+        Authentication anonymousAuth = mock(AnonymousAuthenticationToken.class);
+        when(anonymousAuth.isAuthenticated()).thenReturn(true);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(anonymousAuth);
+        SecurityContextHolder.setContext(securityContext);
+
+        // Act & Assert
+        UnauthorizedException exception = assertThrows(UnauthorizedException.class, () -> {
+            authService.getAuthenticatedUser();
+        });
+
+        assertEquals("Access denied. Please authenticate", exception.getMessage());
     }
 
 }
