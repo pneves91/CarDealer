@@ -96,15 +96,18 @@ public class AuthService {
             throw new UnauthorizedException("Email not verified. Please check your inbox");
         }
 
+        String sessionId = UUID.randomUUID().toString();
         var accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
         var refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
 
-        revokeAllUserTokens(user);
-        saveUserToken(user, accessToken);
-        saveUserToken(user, refreshToken);
+        if (appProperties.isSingleSession()) {
+            revokeAllUserTokens(user);
+        }
+
+        saveUserToken(user, accessToken, sessionId);
+        saveUserToken(user, refreshToken, sessionId);
 
         log.info("User logged in successfully: {}", user.getEmail());
-
         return new AuthTokensResponse(accessToken, refreshToken);
     }
 
@@ -116,17 +119,18 @@ public class AuthService {
 
         String token = authorizationHeader.substring(7);
 
-        tokenRepository.findByToken(token).ifPresentOrElse(
-                t -> {
-                    t.setRevoked(true);
-                    t.setExpired(true);
-                    tokenRepository.save(t);
-                    log.info("Token revoked on logout: {}", token);
-                },
-                () -> log.warn("Attempted logout with invalid or missing token: {}", token)
-        );
+        Token tokenEntity = tokenRepository.findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Token not found"));
 
-        revokeAllUserTokensAssociatedWithAccessToken(token);
+        tokenEntity.setRevoked(true);
+        tokenEntity.setExpired(true);
+        tokenRepository.save(tokenEntity);
+
+        if (appProperties.isSingleSession()) {
+            revokeAllUserTokens(tokenEntity.getUser());
+        } else {
+            revokeTokensBySessionId(tokenEntity.getUser(), tokenEntity.getSessionId());
+        }
     }
 
     @Transactional
@@ -149,13 +153,20 @@ public class AuthService {
             throw new InvalidTokenException("Invalid or expired refresh token");
         }
 
-        revokeAllUserTokens(user);
+        storedToken.setExpired(true);
+        storedToken.setRevoked(true);
+        tokenRepository.save(storedToken);
 
+        if (appProperties.isSingleSession()) {
+            revokeAllUserTokens(user);
+        }
+
+        String sessionId = UUID.randomUUID().toString();
         String newAccessToken = jwtService.generateAccessToken(email, new HashMap<>());
         String newRefreshToken = jwtService.generateRefreshToken(email, new HashMap<>());
 
-        saveUserToken(user, newAccessToken);
-        saveUserToken(user, newRefreshToken);
+        saveUserToken(user, newAccessToken, sessionId);
+        saveUserToken(user, newRefreshToken, sessionId);
 
         log.info("Refresh token accepted. New tokens issued for user: {}", email);
         return new AuthTokensResponse(newAccessToken, newRefreshToken);
@@ -264,11 +275,12 @@ public class AuthService {
         verificationToken.setUsed(true);
         emailVerificationTokenRepository.save(verificationToken);
 
+        String sessionId = UUID.randomUUID().toString();
         String accessToken = jwtService.generateAccessToken(user.getEmail(), new HashMap<>());
         String refreshToken = jwtService.generateRefreshToken(user.getEmail(), new HashMap<>());
 
-        saveUserToken(user, accessToken);
-        saveUserToken(user, refreshToken);
+        saveUserToken(user, accessToken, sessionId);
+        saveUserToken(user, refreshToken, sessionId);
 
         log.info("Email verified successfully for user: {}", user.getEmail());
 
@@ -293,12 +305,13 @@ public class AuthService {
 
     // --- Private helpers
 
-    private void saveUserToken(User user, String jwtToken) {
+    private void saveUserToken(User user, String jwtToken, String sessionId) {
         var token = Token.builder()
                 .user(user)
                 .token(jwtToken)
                 .expired(false)
                 .revoked(false)
+                .sessionId(sessionId)
                 .build();
 
         tokenRepository.save(token);
@@ -316,12 +329,17 @@ public class AuthService {
         tokenRepository.saveAll(tokens);
     }
 
-    private String extractToken(String header) {
-        if (header == null || !header.startsWith("Bearer ")) {
-            log.warn("Missing or invalid Authorization header");
-            throw new InvalidTokenException("Invalid or missing token");
-        }
-        return header.substring(7);
+    private void revokeTokensBySessionId(User user, String sessionId) {
+        List<Token> sessionTokens = tokenRepository.findAllByUser(user).stream()
+                .filter(t -> sessionId.equals(t.getSessionId()))
+                .toList();
+
+        sessionTokens.forEach(t -> {
+            t.setRevoked(true);
+            t.setExpired(true);
+        });
+
+        tokenRepository.saveAll(sessionTokens);
     }
 
     private String generateAndSendVerificationToken(User user) {
@@ -341,14 +359,5 @@ public class AuthService {
         mailService.sendVerificationEmail(user.getEmail(), user.getName(), verificationLink);
 
         return verificationToken;
-    }
-
-    private void revokeAllUserTokensAssociatedWithAccessToken(String token) {
-        // Encontra o usuário do token, revoga todos os tokens dele
-        Token accessToken = tokenRepository.findByToken(token)
-                .orElseThrow(() -> new InvalidTokenException("Token not found"));
-
-        User user = accessToken.getUser(); // Supondo que cada token tem um usuário associado
-        revokeAllUserTokens(user); // Revoga todos os tokens do usuário
     }
 }

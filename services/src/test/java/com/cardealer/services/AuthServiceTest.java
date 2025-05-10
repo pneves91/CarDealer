@@ -35,8 +35,10 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -655,6 +657,192 @@ class AuthServiceTest {
         });
 
         assertEquals("Access denied. Please authenticate", exception.getMessage());
+    }
+
+    // === SINGLE-SESSION ===
+
+    @Test
+    void shouldRevokeOldTokensIfSingleSessionEnabled() {
+        // Arrange
+        String email = "user@example.com";
+        String accessToken = "new-access-token";
+        String refreshToken = "new-refresh-token";
+        String sessionId = "session-123";
+
+        User user = TestUserFactory.createTestUser();
+        user.setEmail(email);
+
+        List<Token> existingTokens = List.of(
+                Token.builder().token("old-token-1").user(user).revoked(false).expired(false).build(),
+                Token.builder().token("old-token-2").user(user).revoked(false).expired(false).build()
+        );
+
+        when(appProperties.isSingleSession()).thenReturn(true);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.generateAccessToken(eq(email), any())).thenReturn(accessToken);
+        when(jwtService.generateRefreshToken(eq(email), any())).thenReturn(refreshToken);
+        when(tokenRepository.findAllByUser(user)).thenReturn(existingTokens);
+
+        LoginRequest loginRequest = new LoginRequest(email, "password");
+
+        // Act
+        authService.login(loginRequest);
+
+        // Assert
+        verify(tokenRepository, times(1)).saveAll(argThat(tokens ->
+                StreamSupport.stream(tokens.spliterator(), false)
+                        .allMatch(t -> t.isRevoked() && t.isExpired())
+        ));
+
+
+        verify(tokenRepository, times(2)).save(any(Token.class));
+    }
+
+    @Test
+    void shouldKeepPreviousTokensIfSingleSessionDisabled() {
+        // Arrange
+        String email = "user@example.com";
+        String accessToken = "new-access-token";
+        String refreshToken = "new-refresh-token";
+
+        User user = TestUserFactory.createTestUser();
+        user.setEmail(email);
+
+        List<Token> existingTokens = List.of(
+                Token.builder().token("old-token-1").user(user).revoked(false).expired(false).build(),
+                Token.builder().token("old-token-2").user(user).revoked(false).expired(false).build()
+        );
+
+        when(appProperties.isSingleSession()).thenReturn(false);
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.generateAccessToken(eq(email), any())).thenReturn(accessToken);
+        when(jwtService.generateRefreshToken(eq(email), any())).thenReturn(refreshToken);
+
+        // lenient para evitar UnnecessaryStubbingException
+        lenient().when(tokenRepository.findAllByUser(user)).thenReturn(existingTokens);
+
+        LoginRequest loginRequest = new LoginRequest(email, "password");
+
+        // Act
+        authService.login(loginRequest);
+
+        // Assert
+        verify(tokenRepository, never()).saveAll(argThat(tokens ->
+                StreamSupport.stream(tokens.spliterator(), false)
+                        .anyMatch(t -> t.isRevoked() || t.isExpired())
+        ));
+
+        verify(tokenRepository, times(2)).save(any(Token.class));
+    }
+
+    @Test
+    void shouldRevokeOnlyCurrentSessionTokensOnLogout() {
+        // Arrange
+        String tokenValue = "access-token-to-logout";
+        String sessionId = "session-abc";
+
+        User user = TestUserFactory.createTestUser();
+
+        Token currentToken = Token.builder()
+                .token(tokenValue)
+                .user(user)
+                .sessionId(sessionId)
+                .revoked(false)
+                .expired(false)
+                .build();
+
+        List<Token> allUserTokens = List.of(
+                currentToken,
+                Token.builder().token("refresh-of-session-abc").user(user).sessionId(sessionId).revoked(false).expired(false).build(),
+                Token.builder().token("token-from-other-session").user(user).sessionId("session-other").revoked(false).expired(false).build()
+        );
+
+        when(appProperties.isSingleSession()).thenReturn(false);
+        when(tokenRepository.findByToken(tokenValue)).thenReturn(Optional.of(currentToken));
+        when(tokenRepository.findAllByUser(user)).thenReturn(allUserTokens);
+
+        String header = "Bearer " + tokenValue;
+
+        // Act
+        authService.logout(header);
+
+        // Assert
+        verify(tokenRepository).save(currentToken);
+
+        verify(tokenRepository).saveAll(argThat(tokens ->
+                StreamSupport.stream(tokens.spliterator(), false)
+                        .allMatch(t -> sessionId.equals(t.getSessionId()) && t.isRevoked() && t.isExpired())
+        ));
+    }
+
+    @Test
+    void shouldRevokeRefreshTokenAfterUse() {
+        // Arrange
+        String email = "user@example.com";
+        String refreshTokenValue = "valid-refresh-token";
+        String newAccessToken = "new-access-token";
+        String newRefreshToken = "new-refresh-token";
+
+        User user = TestUserFactory.createTestUser();
+        user.setEmail(email);
+
+        Token storedRefreshToken = Token.builder()
+                .token(refreshTokenValue)
+                .user(user)
+                .revoked(false)
+                .expired(false)
+                .build();
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.extractEmail(refreshTokenValue)).thenReturn(email);
+        when(jwtService.isTokenValid(refreshTokenValue, email)).thenReturn(true);
+        when(tokenRepository.findByToken(refreshTokenValue)).thenReturn(Optional.of(storedRefreshToken));
+        when(jwtService.generateAccessToken(eq(email), any())).thenReturn(newAccessToken);
+        when(jwtService.generateRefreshToken(eq(email), any())).thenReturn(newRefreshToken);
+        when(appProperties.isSingleSession()).thenReturn(false);
+
+        // Act
+        AuthTokensResponse response = authService.refreshToken(refreshTokenValue);
+
+        // Assert
+        assertEquals(newAccessToken, response.getAccessToken());
+        assertEquals(newRefreshToken, response.getRefreshToken());
+
+        assertTrue(storedRefreshToken.isRevoked());
+        assertTrue(storedRefreshToken.isExpired());
+
+        verify(tokenRepository).save(storedRefreshToken);
+        verify(tokenRepository, times(3)).save(any(Token.class));
+    }
+
+    @Test
+    void shouldRejectRefreshTokenIfAlreadyUsed() {
+        // Arrange
+        String email = "user@example.com";
+        String refreshTokenValue = "used-refresh-token";
+
+        User user = TestUserFactory.createTestUser();
+        user.setEmail(email);
+
+        Token storedRefreshToken = Token.builder()
+                .token(refreshTokenValue)
+                .user(user)
+                .revoked(true)
+                .expired(true)
+                .build();
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
+        when(jwtService.extractEmail(refreshTokenValue)).thenReturn(email);
+        when(jwtService.isTokenValid(refreshTokenValue, email)).thenReturn(true);
+        when(tokenRepository.findByToken(refreshTokenValue)).thenReturn(Optional.of(storedRefreshToken));
+
+        // Act + Assert
+        InvalidTokenException ex = assertThrows(
+                InvalidTokenException.class,
+                () -> authService.refreshToken(refreshTokenValue)
+        );
+
+        assertEquals("Invalid or expired refresh token", ex.getMessage());
     }
 
 }
