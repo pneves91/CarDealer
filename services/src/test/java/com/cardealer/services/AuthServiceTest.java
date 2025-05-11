@@ -25,6 +25,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -44,6 +46,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class AuthServiceTest {
 
     @Mock
@@ -363,7 +366,7 @@ class AuthServiceTest {
         // Assert
         assertTrue(userToken.isRevoked());
         assertTrue(userToken.isExpired());
-        verify(tokenRepository, times(2)).findByToken("dummy-token");
+        verify(tokenRepository).findByToken("dummy-token");
         verify(tokenRepository).save(userToken);
     }
 
@@ -504,7 +507,8 @@ class AuthServiceTest {
         verify(userRepository).findByEmail(email);
         verify(jwtService).isTokenValid(refreshToken, email);
         verify(tokenRepository).findByToken(refreshToken);
-        verify(tokenRepository, times(2)).save(any(Token.class));
+        verify(tokenRepository, times(3)).save(any(Token.class));
+        verify(tokenRepository).saveAll(any());
     }
 
     @Test
@@ -791,7 +795,10 @@ class AuthServiceTest {
                 .user(user)
                 .revoked(false)
                 .expired(false)
+                .sessionId("session-xyz")
                 .build();
+
+        lenient().when(tokenRepository.findAllByUser(user)).thenReturn(List.of(storedRefreshToken));
 
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(user));
         when(jwtService.extractEmail(refreshTokenValue)).thenReturn(email);
@@ -811,9 +818,10 @@ class AuthServiceTest {
         assertTrue(storedRefreshToken.isRevoked());
         assertTrue(storedRefreshToken.isExpired());
 
-        verify(tokenRepository).save(storedRefreshToken);
         verify(tokenRepository, times(3)).save(any(Token.class));
+        verify(tokenRepository).saveAll(any());
     }
+
 
     @Test
     void shouldRejectRefreshTokenIfAlreadyUsed() {

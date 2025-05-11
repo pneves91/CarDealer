@@ -157,9 +157,7 @@ public class AuthService {
         storedToken.setRevoked(true);
         tokenRepository.save(storedToken);
 
-        if (appProperties.isSingleSession()) {
-            revokeAllUserTokens(user);
-        }
+        revokeTokensBySessionId(user, storedToken.getSessionId());
 
         String sessionId = UUID.randomUUID().toString();
         String newAccessToken = jwtService.generateAccessToken(email, new HashMap<>());
