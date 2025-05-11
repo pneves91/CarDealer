@@ -54,6 +54,7 @@ public class AuthService {
 
     @Transactional
     public RegisterResponse register(RegisterRequest registerRequest) {
+        // Regista um novo utilizador e envia email de verificação
         if (userRepository.findByEmail(registerRequest.getEmail()).isPresent()) {
             log.warn("Attempt to register with existing email: {}", registerRequest.getEmail());
             throw new EmailAlreadyExistsException(registerRequest.getEmail());
@@ -76,6 +77,7 @@ public class AuthService {
     }
 
     public AuthTokensResponse login(LoginRequest loginRequest) {
+        // Autentica o utilizador e gera novo par de tokens
         var authToken = new UsernamePasswordAuthenticationToken(
                 loginRequest.getEmail(),
                 loginRequest.getPassword()
@@ -112,6 +114,7 @@ public class AuthService {
     }
 
     public void logout(String authorizationHeader) {
+        // Faz logout da sessão atual revogando os tokens associados ao access token
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
             log.warn("Missing or invalid Authorization header during logout");
             throw new InvalidTokenException("Invalid or missing token");
@@ -135,6 +138,7 @@ public class AuthService {
 
     @Transactional
     public AuthTokensResponse refreshToken(String refreshToken) {
+        // Valida e processa um refresh token, revogando o anterior e criando nova sessão
         String email = jwtService.extractEmail(refreshToken);
 
         User user = userRepository.findByEmail(email)
@@ -171,6 +175,7 @@ public class AuthService {
     }
 
     public UserResponseDTO getAuthenticatedUser() {
+        // Devolve os dados do utilizador autenticado através do SecurityContext
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated() ||
@@ -193,6 +198,7 @@ public class AuthService {
 
     @Transactional
     public void forgotPassword(String email) {
+        // Inicia o processo de recuperação de password, gerando token e enviando email
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException(email));
 
@@ -218,6 +224,7 @@ public class AuthService {
 
     @Transactional
     public void resetPassword(String token, String newPassword) {
+        // Valida o token de recuperação e atualiza a password do utilizador
         PasswordResetToken resetToken = passwordResetTokenRepository.findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Invalid or missing reset token"));
 
@@ -249,6 +256,7 @@ public class AuthService {
 
     @Transactional
     public AuthTokensResponse verifyEmail(String token) {
+        // Confirma o email como verificado após validação do token
         if (token == null || token.isBlank()) {
             throw new InvalidTokenException("Missing verification token");
         }
@@ -287,6 +295,7 @@ public class AuthService {
 
     @Transactional
     public void resendVerificationEmail(String email) {
+        // Reenvia o email de verificação para o utilizador com nova validade
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UserNotFoundException(email));
 

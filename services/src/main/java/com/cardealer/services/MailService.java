@@ -21,6 +21,7 @@ public class MailService {
     private EmailTemplateService emailTemplateService;
 
     public void sendVerificationEmail(String to, String name, String verificationLink) {
+        // Envia email de verificação de conta com link personalizado
         String subject = "Verify your email address";
         String content = emailTemplateService.buildEmailVerificationTemplate(name, verificationLink);
         sendHtmlEmail(to, subject, content);
@@ -28,6 +29,7 @@ public class MailService {
     }
 
     public void sendResetPasswordEmail(String to, String name, String resetLink) {
+        // Envia email de recuperação de password com link de reset
         String subject = "Reset your password";
         String content = emailTemplateService.buildResetPasswordTemplate(name, resetLink);
         sendHtmlEmail(to, subject, content);
@@ -35,6 +37,7 @@ public class MailService {
     }
 
     private void sendHtmlEmail(String to, String subject, String htmlContent) {
+        // Envia email em formato HTML com subject e conteúdo fornecido
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, "utf-8");
